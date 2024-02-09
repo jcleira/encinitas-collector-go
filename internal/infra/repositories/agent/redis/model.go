@@ -1,19 +1,19 @@
 package redis
 
 import (
-	"github.com/google/uuid"
 	"github.com/jcleira/encinitas-collector-go/internal/app/agent/aggregates"
 )
 
 // redisEvent represents the redis version of an event coming from
 // browser/mobile, including both request and response data.
 type redisEvent struct {
-	ID                uuid.UUID      `json:"id"`
-	BrowserID         string         `json:"browser_id"`
+	ID                string         `json:"id"`
 	ClientID          string         `json:"client_id"`
+	BrowserID         string         `json:"browser_id"`
 	Handled           interface{}    `json:"handled"`
 	ReplacesClientID  *string        `json:"replaces_client_id,omitempty"`
 	ResultingClientID string         `json:"resulting_client_id"`
+	Duration          int64          `json:"duration"`
 	Request           *redisRequest  `json:"request,omitempty"`
 	Response          *redisResponse `json:"response,omitempty"`
 }

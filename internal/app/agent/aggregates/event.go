@@ -1,18 +1,15 @@
 package aggregates
 
-import (
-	"github.com/google/uuid"
-)
-
 // Event represents an event coming from browser/mobile, including both
 // request and response data.
 type Event struct {
-	ID                uuid.UUID
+	ID                string
 	BrowserID         string
 	ClientID          string
 	Handled           interface{}
 	ReplacesClientID  *string
 	ResultingClientID string
+	Duration          int64
 	Request           *Request
 	Response          *Response
 }
