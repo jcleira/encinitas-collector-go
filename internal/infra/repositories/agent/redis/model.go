@@ -50,6 +50,52 @@ type redisResponse struct {
 	URL          string      `json:"url"`
 }
 
+func (r *redisEvent) toAggregate() aggregates.Event {
+	return aggregates.Event{
+		ID:                r.ID,
+		ClientID:          r.ClientID,
+		BrowserID:         r.BrowserID,
+		Handled:           r.Handled,
+		ReplacesClientID:  r.ReplacesClientID,
+		ResultingClientID: r.ResultingClientID,
+		Request:           r.Request.toAggregate(),
+		Response:          r.Response.toAggregate(),
+	}
+}
+
+func (r *redisRequest) toAggregate() *aggregates.Request {
+	return &aggregates.Request{
+		Body:           r.Body,
+		BodyUsed:       r.BodyUsed,
+		Cache:          r.Cache,
+		Credentials:    r.Credentials,
+		Destination:    r.Destination,
+		Headers:        r.Headers,
+		Integrity:      r.Integrity,
+		Method:         r.Method,
+		Mode:           r.Mode,
+		Redirect:       r.Redirect,
+		Referrer:       r.Referrer,
+		ReferrerPolicy: r.ReferrerPolicy,
+		URL:            r.URL,
+		Signal:         r.Signal,
+	}
+}
+
+func (r *redisResponse) toAggregate() *aggregates.Response {
+	return &aggregates.Response{
+		Body:         r.Body,
+		BodyUsed:     r.BodyUsed,
+		Headers:      r.Headers,
+		Ok:           r.Ok,
+		Redirected:   r.Redirected,
+		Status:       r.Status,
+		StatusText:   r.StatusText,
+		ResponseType: r.ResponseType,
+		URL:          r.URL,
+	}
+}
+
 func redisEventFromAggregate(event aggregates.Event) redisEvent {
 	var redisRequest *redisRequest
 	if event.Request != nil {

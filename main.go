@@ -48,6 +48,18 @@ func main() {
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
+		eventCollector := agentServices.NewEventCollector(
+			agentRepositoriesRedis.New(redisClient),
+		)
+
+		logger.Info("starting event collector")
+		eventCollector.Collect(ctx)
+		logger.Info("event collector stopped")
+
+		return nil
+	})
+
+	g.Go(func() error {
 		router := gin.Default()
 		router.Use(cors.Default())
 

@@ -15,11 +15,11 @@ const (
 // SubscribeToAgentEvents subscribes to the 'agent_events' channel and listens
 // for messages.
 func (r *Repository) SubscribeToEvents(
-	ctx context.Context) (chan<- aggregates.Event, chan<- error) {
+	ctx context.Context) (chan aggregates.Event, chan error) {
 	pubsub := r.client.Subscribe(ctx, channel)
 
-	eventChannel := make(chan<- aggregates.Event)
-	errorChannel := make(chan<- error)
+	eventChannel := make(chan aggregates.Event)
+	errorChannel := make(chan error)
 
 	redisChannel := pubsub.Channel()
 	go func() {
@@ -32,6 +32,8 @@ func (r *Repository) SubscribeToEvents(
 					errorChannel <- fmt.Errorf("json.Unmarshal: %w", err)
 					continue
 				}
+
+				eventChannel <- redisEvent.toAggregate()
 
 			case <-ctx.Done():
 				return
