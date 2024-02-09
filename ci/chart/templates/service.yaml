@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "encinitas-collector-go.fullname" . }}
+  labels:
+    {{- include "encinitas-collector-go.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "encinitas-collector-go.selectorLabels" . | nindent 4 }}

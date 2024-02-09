@@ -1,0 +1,6 @@
+
+mocks:
+	go generate -run "mockery" ./...
+
+test:
+	go test -mod=vendor -race -cover ./...

@@ -1,0 +1,64 @@
+image:
+  repository: 952729869933.dkr.ecr.eu-west-1.amazonaws.com/sales-ai
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  className: ""
+  annotations:
+    kubernetes.io/ingress.class: nginx
+  hosts:
+    - host: sales-ai-pre.bysidecar.me
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: tls-sales-ai-pre-bysidecar-me
+      hosts:
+        - sales-ai-pre.bysidecar.me
+env:
+- name: AWS_REGION
+  value: "eu-west-1"
+- name: OPENAI_KEY
+  valueFrom:
+    secretKeyRef:
+      name: openai
+      key: apikey
+- name: DB_HOST
+  value: "pre.c848y92oajny.eu-west-1.rds.amazonaws.com"
+- name: DB_PORT
+  value: "3306"
+- name: DB_NAME
+  value: "sales_ai"
+- name: DB_USER
+  valueFrom:
+    secretKeyRef:
+      name: pre-database
+      key: user
+- name: DB_PASS
+  valueFrom:
+    secretKeyRef:
+      name: pre-database
+      key: pass
+
+autoscaling:
+  enabled: false
+serviceAccount:
+  create: false
+resources: {}
+podAnnotations: {}
+podSecurityContext: {}
+securityContext: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
