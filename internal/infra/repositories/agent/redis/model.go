@@ -1,19 +1,19 @@
 package redis
 
 import (
-	"github.com/google/uuid"
 	"github.com/jcleira/encinitas-collector-go/internal/app/agent/aggregates"
 )
 
 // redisEvent represents the redis version of an event coming from
 // browser/mobile, including both request and response data.
 type redisEvent struct {
-	ID                uuid.UUID      `json:"id"`
-	BrowserID         string         `json:"browser_id"`
+	ID                string         `json:"id"`
 	ClientID          string         `json:"client_id"`
+	BrowserID         string         `json:"browser_id"`
 	Handled           interface{}    `json:"handled"`
 	ReplacesClientID  *string        `json:"replaces_client_id,omitempty"`
 	ResultingClientID string         `json:"resulting_client_id"`
+	Duration          int64          `json:"duration"`
 	Request           *redisRequest  `json:"request,omitempty"`
 	Response          *redisResponse `json:"response,omitempty"`
 }
@@ -48,6 +48,52 @@ type redisResponse struct {
 	StatusText   string      `json:"status_text"`
 	ResponseType string      `json:"response_type"`
 	URL          string      `json:"url"`
+}
+
+func (r *redisEvent) toAggregate() aggregates.Event {
+	return aggregates.Event{
+		ID:                r.ID,
+		ClientID:          r.ClientID,
+		BrowserID:         r.BrowserID,
+		Handled:           r.Handled,
+		ReplacesClientID:  r.ReplacesClientID,
+		ResultingClientID: r.ResultingClientID,
+		Request:           r.Request.toAggregate(),
+		Response:          r.Response.toAggregate(),
+	}
+}
+
+func (r *redisRequest) toAggregate() *aggregates.Request {
+	return &aggregates.Request{
+		Body:           r.Body,
+		BodyUsed:       r.BodyUsed,
+		Cache:          r.Cache,
+		Credentials:    r.Credentials,
+		Destination:    r.Destination,
+		Headers:        r.Headers,
+		Integrity:      r.Integrity,
+		Method:         r.Method,
+		Mode:           r.Mode,
+		Redirect:       r.Redirect,
+		Referrer:       r.Referrer,
+		ReferrerPolicy: r.ReferrerPolicy,
+		URL:            r.URL,
+		Signal:         r.Signal,
+	}
+}
+
+func (r *redisResponse) toAggregate() *aggregates.Response {
+	return &aggregates.Response{
+		Body:         r.Body,
+		BodyUsed:     r.BodyUsed,
+		Headers:      r.Headers,
+		Ok:           r.Ok,
+		Redirected:   r.Redirected,
+		Status:       r.Status,
+		StatusText:   r.StatusText,
+		ResponseType: r.ResponseType,
+		URL:          r.URL,
+	}
 }
 
 func redisEventFromAggregate(event aggregates.Event) redisEvent {

@@ -3,16 +3,17 @@ package aggregates
 import "time"
 
 type Transaction struct {
-	Slot         int64
-	Signature    []byte
-	IsVote       bool
-	MessageType  int16
-	Signatures   [][]byte
-	MessageHash  []byte
-	WriteVersion int64
-	UpdatedOn    time.Time
-	Index        int64
-	//Meta              TransactionStatusMeta
-	//LegacyMessage     TransactionMessage
-	//V0LoadedMessage   LoadedMessageV0
+	Slot            int64
+	Signature       string
+	IsVote          bool
+	MessageType     int
+	LegacyMessage   string
+	V0LoadedMessage string
+	Signatures      string
+	MessageHash     []byte
+	Meta            string
+	WriteVersion    int64
+	UpdatedOn       time.Time
+	TxnIndex        int64
+	ProcessedAt     *time.Time
 }

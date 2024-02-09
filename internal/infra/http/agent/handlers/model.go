@@ -1,21 +1,27 @@
 package handlers
 
 import (
-	"github.com/google/uuid"
 	"github.com/jcleira/encinitas-collector-go/internal/app/agent/aggregates"
 )
+
+// httpEventRequest represents the http version of an event coming from
+// browser/mobile, including both request and response data.
+type httpEventRequest struct {
+	Event    httpEvent     `json:"event"`
+	Request  *httpRequest  `json:"request,omitempty"`
+	Response *httpResponse `json:"response,omitempty"`
+}
 
 // httpEvent represents the http version of an event coming from
 // browser/mobile, including both request and response data.
 type httpEvent struct {
-	ID                uuid.UUID     `json:"id"`
-	BrowserID         string        `json:"browser_id"`
-	ClientID          string        `json:"client_id"`
-	Handled           interface{}   `json:"handled"`
-	ReplacesClientID  *string       `json:"replaces_client_id,omitempty"`
-	ResultingClientID string        `json:"resulting_client_id"`
-	Request           *httpRequest  `json:"request,omitempty"`
-	Response          *httpResponse `json:"response,omitempty"`
+	ID                string      `json:"id"`
+	BrowserID         string      `json:"browser_id"`
+	ClientID          string      `json:"client_id"`
+	Handled           interface{} `json:"handled"`
+	ReplacesClientID  *string     `json:"replaces_client_id,omitempty"`
+	ResultingClientID string      `json:"resulting_client_id"`
+	Duration          int64       `json:"duration"`
 }
 
 // httpRequest struct represents the http version of a browser/mobile request.
@@ -50,24 +56,25 @@ type httpResponse struct {
 	URL          string      `json:"url"`
 }
 
-func (he *httpEvent) ToAggregate() aggregates.Event {
+func (her *httpEventRequest) ToAggregate() aggregates.Event {
 	var request *aggregates.Request
-	if he.Request != nil {
-		request = he.Request.ToAggregate()
+	if her.Request != nil {
+		request = her.Request.ToAggregate()
 	}
 
 	var response *aggregates.Response
-	if he.Response != nil {
-		response = he.Response.ToAggregate()
+	if her.Response != nil {
+		response = her.Response.ToAggregate()
 	}
 
 	return aggregates.Event{
-		ID:                he.ID,
-		BrowserID:         he.BrowserID,
-		ClientID:          he.ClientID,
-		Handled:           he.Handled,
-		ReplacesClientID:  he.ReplacesClientID,
-		ResultingClientID: he.ResultingClientID,
+		ID:                her.Event.ID,
+		BrowserID:         her.Event.BrowserID,
+		ClientID:          her.Event.ClientID,
+		Handled:           her.Event.Handled,
+		ReplacesClientID:  her.Event.ReplacesClientID,
+		ResultingClientID: her.Event.ResultingClientID,
+		Duration:          her.Event.Duration,
 		Request:           request,
 		Response:          response,
 	}

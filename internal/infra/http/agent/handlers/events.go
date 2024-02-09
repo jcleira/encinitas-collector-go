@@ -29,14 +29,14 @@ func NewEventsCreatorHandler(
 
 // Handle is the handler function to create events
 func (ech *EventsCreatorHandler) Handle(c *gin.Context) {
-	var httpEvent httpEvent
-	if err := c.ShouldBindJSON(&httpEvent); err != nil {
+	var httpEventRequest httpEventRequest
+	if err := c.ShouldBindJSON(&httpEventRequest); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	if err := ech.eventsPublisher.Publish(
-		c.Request.Context(), httpEvent.ToAggregate()); err != nil {
+		c.Request.Context(), httpEventRequest.ToAggregate()); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

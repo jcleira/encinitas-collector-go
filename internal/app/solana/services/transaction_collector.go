@@ -1,37 +1,72 @@
 package services
 
 import (
-	"fmt"
+	"context"
+	"log/slog"
+	"time"
 
 	"github.com/jcleira/encinitas-collector-go/internal/app/solana/aggregates"
 )
 
-// TransactionRepository define the methods to become a transaction repository.
-type TransactionRepository interface {
-	SelectTransactionByUpdatedOn(
-		updatedOn int64) ([]aggregates.Transaction, error)
+// TransactionsSQLRepository define the methods to become a transaction's
+// SQL sqlRepository.
+type TransactionsSQLRepository interface {
+	SelectTransactionsByProcessedAt(
+		context.Context) ([]aggregates.Transaction, error)
+	UpdateTransactionProcessedAt(
+		context.Context, string, time.Time) error
 }
 
-// TransactionsCollector define the dependencies needed to perform the
+type TransactionsRedisRepository interface {
+	PublishTransaction(context.Context, aggregates.Transaction) error
+}
+
+// TransactionsCollector  define the dependencies needed to perform the
 // transaction collection.
-type TransactionCollector struct {
-	repository TransactionRepository
+type TransactionsCollector struct {
+	sqlRepository   TransactionsSQLRepository
+	redisRepository TransactionsRedisRepository
 }
 
-func NewTransactionCollector(
-	repository TransactionRepository) *TransactionCollector {
-	return &TransactionCollector{
-		repository: repository,
+// NewTransactionsCollector creates a new transaction collector.
+func NewTransactionsCollector(
+	sqlRepository TransactionsSQLRepository,
+	redisRepository TransactionsRedisRepository,
+) *TransactionsCollector {
+	return &TransactionsCollector{
+		sqlRepository:   sqlRepository,
+		redisRepository: redisRepository,
 	}
 }
 
 // CollectTransactions collects transactions from the database.
-func (tc *TransactionCollector) CollectTransactions(
-	updatedOn int64) ([]aggregates.Transaction, error) {
-	transactions, err := tc.repository.SelectTransactionByUpdatedOn(updatedOn)
-	if err != nil {
-		return nil, fmt.Errorf("tc.repository.SelectTransactionByUpdatedOn, err: %w", err)
-	}
+func (tc *TransactionsCollector) Collect(ctx context.Context) {
+	for {
+		// Sleep for 1 second before collecting transactions.
+		// We should use a better approach to avoid busy waiting.
+		time.Sleep(1 * time.Second)
 
-	return transactions, nil
+		select {
+		case <-ctx.Done():
+			return
+
+		default:
+			transactions, err := tc.sqlRepository.SelectTransactionsByProcessedAt(ctx)
+			if err != nil {
+				slog.Error("tc.sqlRepository.SelectTransactionsByProcessedAt", err)
+				continue
+			}
+
+			for _, transaction := range transactions {
+				if err := tc.redisRepository.PublishTransaction(ctx, transaction); err != nil {
+					slog.Error("tc.sqlRepository.PublishTransaction", err)
+				}
+
+				if err := tc.sqlRepository.UpdateTransactionProcessedAt(
+					ctx, transaction.Signature, time.Now()); err != nil {
+					slog.Error("tc.sqlRepository.SetUpdatedOn", err)
+				}
+			}
+		}
+	}
 }

@@ -15,11 +15,11 @@ const (
 // SubscribeToAgentEvents subscribes to the 'agent_events' channel and listens
 // for messages.
 func (r *Repository) SubscribeToEvents(
-	ctx context.Context) (chan<- aggregates.Event, chan<- error) {
+	ctx context.Context) (chan aggregates.Event, chan error) {
 	pubsub := r.client.Subscribe(ctx, channel)
 
-	eventChannel := make(chan<- aggregates.Event)
-	errorChannel := make(chan<- error)
+	eventChannel := make(chan aggregates.Event)
+	errorChannel := make(chan error)
 
 	redisChannel := pubsub.Channel()
 	go func() {
@@ -33,6 +33,8 @@ func (r *Repository) SubscribeToEvents(
 					continue
 				}
 
+				eventChannel <- redisEvent.toAggregate()
+
 			case <-ctx.Done():
 				return
 			}
@@ -45,9 +47,7 @@ func (r *Repository) SubscribeToEvents(
 // PublishEvent publishes an event to the 'agent_events' channel.
 func (r *Repository) PublishEvent(
 	ctx context.Context, event aggregates.Event) error {
-	redisEvent := redisEventFromAggregate(event)
-
-	message, err := json.Marshal(redisEvent)
+	message, err := json.Marshal(redisEventFromAggregate(event))
 	if err != nil {
 		return fmt.Errorf("json.Marshal: %w", err)
 	}
@@ -55,6 +55,21 @@ func (r *Repository) PublishEvent(
 	err = r.client.Publish(ctx, channel, string(message)).Err()
 	if err != nil {
 		return fmt.Errorf("client.Publish: %w", err)
+	}
+
+	return nil
+}
+
+// SetEvent sets an event in the redis repository.
+func (r *Repository) SetEvent(
+	ctx context.Context, key string, event aggregates.Event) error {
+	message, err := json.Marshal(redisEventFromAggregate(event))
+	if err != nil {
+		return fmt.Errorf("json.Marshal: %w", err)
+	}
+
+	if err = r.client.Set(ctx, key, string(message), 0).Err(); err != nil {
+		return fmt.Errorf("client.Set: %w", err)
 	}
 
 	return nil
