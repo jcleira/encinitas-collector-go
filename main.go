@@ -41,7 +41,7 @@ func main() {
 
 	redisClient := redis.NewClient(&redis.Options{
 		Addr:     config.Redis.Addr,
-		Password: config.Redis.Password,
+		Password: config.Redis.Pass,
 		DB:       config.Redis.DB,
 	})
 
@@ -58,7 +58,7 @@ func main() {
 				),
 			).Handle,
 		)
-		return router.Run(":3000")
+		return router.Run(":3001")
 	})
 
 	g.Go(func() error {

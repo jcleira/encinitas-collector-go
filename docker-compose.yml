@@ -1,0 +1,30 @@
+version: "3.8"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: encinitas-collector-go
+    environment:
+      REDIS_ADDR: redis:6379
+      REDIS_PASS:
+      REDIS_DB:
+    image: 017128164736.dkr.ecr.eu-west-1.amazonaws.com/encinitas-collector-go:dev
+    networks:
+      - encinitas_collector_go
+    ports:
+      - "3001:3001"
+    restart: unless-stopped
+
+  redis:
+    image: redis:latest
+    container_name: encinitas-redis
+    networks:
+      - encinitas_collector_go
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+networks:
+  encinitas_collector_go:
