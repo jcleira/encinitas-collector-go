@@ -1,6 +1,8 @@
 package redis
 
 import (
+	"time"
+
 	"github.com/jcleira/encinitas-collector-go/internal/app/agent/aggregates"
 )
 
@@ -13,13 +15,14 @@ type redisEvent struct {
 	Handled           interface{}    `json:"handled"`
 	ReplacesClientID  *string        `json:"replaces_client_id,omitempty"`
 	ResultingClientID string         `json:"resulting_client_id"`
-	Duration          int64          `json:"duration"`
+	EventTime         time.Time      `json:"event_time"`
 	Request           *redisRequest  `json:"request,omitempty"`
 	Response          *redisResponse `json:"response,omitempty"`
 }
 
 // redisRequest struct represents the redis version of a browser/mobile request.
 type redisRequest struct {
+	RequestTime    time.Time   `json:"request_time"`
 	Body           *string     `json:"body,omitempty"`
 	BodyUsed       bool        `json:"body_used"`
 	Cache          string      `json:"cache"`
@@ -39,6 +42,7 @@ type redisRequest struct {
 // redisResponse struct represents the redis version of a browser/mobile
 // response.
 type redisResponse struct {
+	ResponseTime time.Time   `json:"response_time"`
 	Body         *string     `json:"body,omitempty"`
 	BodyUsed     bool        `json:"body_used"`
 	Headers      interface{} `json:"headers"`
@@ -58,6 +62,7 @@ func (r *redisEvent) toAggregate() aggregates.Event {
 		Handled:           r.Handled,
 		ReplacesClientID:  r.ReplacesClientID,
 		ResultingClientID: r.ResultingClientID,
+		EventTime:         r.EventTime,
 		Request:           r.Request.toAggregate(),
 		Response:          r.Response.toAggregate(),
 	}
@@ -65,6 +70,7 @@ func (r *redisEvent) toAggregate() aggregates.Event {
 
 func (r *redisRequest) toAggregate() *aggregates.Request {
 	return &aggregates.Request{
+		RequestTime:    r.RequestTime,
 		Body:           r.Body,
 		BodyUsed:       r.BodyUsed,
 		Cache:          r.Cache,
@@ -84,6 +90,7 @@ func (r *redisRequest) toAggregate() *aggregates.Request {
 
 func (r *redisResponse) toAggregate() *aggregates.Response {
 	return &aggregates.Response{
+		ResponseTime: r.ResponseTime,
 		Body:         r.Body,
 		BodyUsed:     r.BodyUsed,
 		Headers:      r.Headers,
@@ -114,6 +121,7 @@ func redisEventFromAggregate(event aggregates.Event) redisEvent {
 		Handled:           event.Handled,
 		ReplacesClientID:  event.ReplacesClientID,
 		ResultingClientID: event.ResultingClientID,
+		EventTime:         event.EventTime,
 		Request:           redisRequest,
 		Response:          redisResponse,
 	}
@@ -121,6 +129,7 @@ func redisEventFromAggregate(event aggregates.Event) redisEvent {
 
 func redisRequestFromAggregate(request aggregates.Request) *redisRequest {
 	return &redisRequest{
+		RequestTime:    request.RequestTime,
 		Body:           request.Body,
 		BodyUsed:       request.BodyUsed,
 		Cache:          request.Cache,
@@ -140,6 +149,7 @@ func redisRequestFromAggregate(request aggregates.Request) *redisRequest {
 
 func redisResponseFromAggregate(response aggregates.Response) *redisResponse {
 	return &redisResponse{
+		ResponseTime: response.ResponseTime,
 		Body:         response.Body,
 		BodyUsed:     response.BodyUsed,
 		Headers:      response.Headers,

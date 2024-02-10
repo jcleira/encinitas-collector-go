@@ -15,8 +15,9 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASS: ${POSTGRES_PASS}
       POSTGRES_DB: solana
+      INFLUXDB_URL: http://localhost:8086
+      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
     image: 017128164736.dkr.ecr.eu-west-1.amazonaws.com/encinitas-collector-go:dev
-    # I'm using the host network to have access to my VPN resources
     network_mode: host
     restart: unless-stopped
 
@@ -27,6 +28,22 @@ services:
       - "6379:6379"
     restart: unless-stopped
 
-# The custom network is no longer needed since we are using the host network for the app.
-# networks:
-#   encinitas_collector_go:
+  influxdb:
+    image: influxdb:2.0
+    container_name: encinitas-influxdb
+    volumes:
+      - influxdb-volume:/var/lib/influxdb2
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: influxdb
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_PASS}
+      DOCKER_INFLUXDB_INIT_ORG: encinitas
+      DOCKER_INFLUXDB_INIT_BUCKET: encinitas_metrics
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUXDB_TOKEN}
+    ports:
+      - "8086:8086"
+    restart: unless-stopped
+
+volumes:
+  influxdb-volume:
+

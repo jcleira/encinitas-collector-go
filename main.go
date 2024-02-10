@@ -14,15 +14,18 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	influxdb "github.com/influxdata/influxdb-client-go/v2"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/jcleira/encinitas-collector-go/config"
 	agentServices "github.com/jcleira/encinitas-collector-go/internal/app/agent/services"
+	collectorServices "github.com/jcleira/encinitas-collector-go/internal/app/collector/services"
 	solanaServices "github.com/jcleira/encinitas-collector-go/internal/app/solana/services"
 	agentHandlers "github.com/jcleira/encinitas-collector-go/internal/infra/http/agent/handlers"
 	agentRepositoriesRedis "github.com/jcleira/encinitas-collector-go/internal/infra/repositories/agent/redis"
+	collectorRepositoriesInfluxDB "github.com/jcleira/encinitas-collector-go/internal/infra/repositories/collector/influxdb"
 	solanaRepositoriesRedis "github.com/jcleira/encinitas-collector-go/internal/infra/repositories/solana/redis"
 	solanaRepositoriesSQL "github.com/jcleira/encinitas-collector-go/internal/infra/repositories/solana/sql"
 )
@@ -48,15 +51,13 @@ func main() {
 		DB:       config.Redis.DB,
 	})
 
-	posgresDNS := config.Postgres.URL()
-
-	fmt.Println(posgresDNS)
-
-	sqlx, err := sqlx.Connect("postgres", posgresDNS)
+	sqlx, err := sqlx.Connect("postgres", config.Postgres.URL())
 	if err != nil {
 		slog.Error("can't connect to postgres: ", err)
 		os.Exit(1)
 	}
+
+	influxDB := influxdb.NewClient(config.InfluxDB.URL, config.InfluxDB.Token)
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -81,6 +82,20 @@ func main() {
 		logger.Info("starting transactions collector")
 		transactionsCollector.Collect(ctx)
 		logger.Info("transactions collector stopped")
+
+		return nil
+	})
+
+	g.Go(func() error {
+		ingester := collectorServices.NewIngester(
+			solanaRepositoriesRedis.New(redisClient),
+			agentRepositoriesRedis.New(redisClient),
+			collectorRepositoriesInfluxDB.New(influxDB),
+		)
+
+		logger.Info("starting ingester")
+		ingester.Ingest(ctx)
+		logger.Info("ingester stopped")
 
 		return nil
 	})
