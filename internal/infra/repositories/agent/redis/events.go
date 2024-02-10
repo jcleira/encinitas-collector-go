@@ -74,3 +74,19 @@ func (r *Repository) SetEvent(
 
 	return nil
 }
+
+// GetEvent gets an event from the redis repository.
+func (r *Repository) GetEvent(
+	ctx context.Context, key string) (aggregates.Event, error) {
+	message, err := r.client.Get(ctx, key).Result()
+	if err != nil {
+		return aggregates.Event{}, fmt.Errorf("client.Get: %w", err)
+	}
+
+	var redisEvent redisEvent
+	if err = json.Unmarshal([]byte(message), &redisEvent); err != nil {
+		return aggregates.Event{}, fmt.Errorf("json.Unmarshal: %w", err)
+	}
+
+	return redisEvent.toAggregate(), nil
+}

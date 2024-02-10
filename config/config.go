@@ -10,6 +10,7 @@ import (
 type Config struct {
 	Redis    Redis
 	Postgres Postgres
+	InfluxDB InfluxDB
 }
 
 // Redis is the struct that holds the configuration of the Redis connection
@@ -39,4 +40,9 @@ func (p Postgres) URL() string {
 		p.DB,
 		p.SSLMode,
 		p.StatementTimeout.Milliseconds())
+}
+
+type InfluxDB struct {
+	URL   string `envconfig:"INFLUXDB_URL" default:"http://localhost:8086"`
+	Token string `envconfig:"INFLUXDB_TOKEN" default:""`
 }

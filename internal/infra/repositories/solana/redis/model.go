@@ -22,6 +22,24 @@ type redisTransaction struct {
 	ProcessedAt     *time.Time `json:"processed_at,omitempty"`
 }
 
+func (r redisTransaction) toAggregate() aggregates.Transaction {
+	return aggregates.Transaction{
+		Slot:            r.Slot,
+		Signature:       r.Signature,
+		IsVote:          r.IsVote,
+		MessageType:     r.MessageType,
+		LegacyMessage:   r.LegacyMessage,
+		V0LoadedMessage: r.V0LoadedMessage,
+		Signatures:      r.Signatures,
+		MessageHash:     r.MessageHash,
+		Meta:            r.Meta,
+		WriteVersion:    r.WriteVersion,
+		UpdatedOn:       r.UpdatedOn,
+		TxnIndex:        r.TxnIndex,
+		ProcessedAt:     r.ProcessedAt,
+	}
+}
+
 func redisTransactionFromAggregate(
 	transaction aggregates.Transaction) redisTransaction {
 	return redisTransaction{

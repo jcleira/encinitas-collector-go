@@ -69,12 +69,6 @@ func (ec *EventCollector) Collect(ctx context.Context) {
 				continue
 			}
 
-			slog.Info("Set event: ",
-				solanaRequestBody.Method,
-				solanaResponseBody.Result,
-				slog.Any("event", event),
-			)
-
 			ec.repository.SetEvent(ctx,
 				fmt.Sprintf("%s.%s", solanaRequestBody.Method, solanaResponseBody.Result),
 				event,

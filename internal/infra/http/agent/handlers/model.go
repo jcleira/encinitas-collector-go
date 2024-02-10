@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"time"
+
 	"github.com/jcleira/encinitas-collector-go/internal/app/agent/aggregates"
 )
 
@@ -16,18 +18,19 @@ type httpEventRequest struct {
 // browser/mobile, including both request and response data.
 type httpEvent struct {
 	ID                string      `json:"id"`
-	BrowserID         string      `json:"browser_id"`
-	ClientID          string      `json:"client_id"`
+	BrowserID         string      `json:"browserId"`
+	ClientID          string      `json:"clientId"`
 	Handled           interface{} `json:"handled"`
-	ReplacesClientID  *string     `json:"replaces_client_id,omitempty"`
-	ResultingClientID string      `json:"resulting_client_id"`
-	Duration          int64       `json:"duration"`
+	ReplacesClientID  *string     `json:"replacesClientId,omitempty"`
+	ResultingClientID string      `json:"resultingClientId"`
+	EventTime         int64       `json:"eventTime"`
 }
 
 // httpRequest struct represents the http version of a browser/mobile request.
 type httpRequest struct {
+	RequestTime    int64       `json:"requestTime"`
 	Body           *string     `json:"body,omitempty"`
-	BodyUsed       bool        `json:"body_used"`
+	BodyUsed       bool        `json:"bodyUsed"`
 	Cache          string      `json:"cache"`
 	Credentials    string      `json:"credentials"`
 	Destination    string      `json:"destination"`
@@ -37,7 +40,7 @@ type httpRequest struct {
 	Mode           string      `json:"mode"`
 	Redirect       string      `json:"redirect"`
 	Referrer       string      `json:"referrer"`
-	ReferrerPolicy string      `json:"referrer_policy"`
+	ReferrerPolicy string      `json:"referrerPolicy"`
 	URL            string      `json:"url"`
 	Signal         interface{} `json:"signal"`
 }
@@ -45,14 +48,15 @@ type httpRequest struct {
 // httpResponse struct represents the http version of a browser/mobile
 // response.
 type httpResponse struct {
+	ResponseTime int64       `json:"responseTime"`
 	Body         *string     `json:"body,omitempty"`
-	BodyUsed     bool        `json:"body_used"`
+	BodyUsed     bool        `json:"bodyUsed"`
 	Headers      interface{} `json:"headers"`
 	Ok           bool        `json:"ok"`
 	Redirected   bool        `json:"redirected"`
 	Status       uint16      `json:"status"`
-	StatusText   string      `json:"status_text"`
-	ResponseType string      `json:"response_type"`
+	StatusText   string      `json:"statusText"`
+	ResponseType string      `json:"responseType"`
 	URL          string      `json:"url"`
 }
 
@@ -74,14 +78,16 @@ func (her *httpEventRequest) ToAggregate() aggregates.Event {
 		Handled:           her.Event.Handled,
 		ReplacesClientID:  her.Event.ReplacesClientID,
 		ResultingClientID: her.Event.ResultingClientID,
-		Duration:          her.Event.Duration,
+		EventTime:         time.Unix(0, her.Event.EventTime*int64(time.Millisecond)),
 		Request:           request,
 		Response:          response,
 	}
 }
 
 func (hr *httpRequest) ToAggregate() *aggregates.Request {
+
 	return &aggregates.Request{
+		RequestTime:    time.Unix(0, hr.RequestTime*int64(time.Millisecond)),
 		Body:           hr.Body,
 		BodyUsed:       hr.BodyUsed,
 		Cache:          hr.Cache,
@@ -101,6 +107,7 @@ func (hr *httpRequest) ToAggregate() *aggregates.Request {
 
 func (hr *httpResponse) ToAggregate() *aggregates.Response {
 	return &aggregates.Response{
+		ResponseTime: time.Unix(0, hr.ResponseTime*int64(time.Millisecond)),
 		Body:         hr.Body,
 		BodyUsed:     hr.BodyUsed,
 		Headers:      hr.Headers,

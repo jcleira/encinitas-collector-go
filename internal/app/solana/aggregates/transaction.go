@@ -2,6 +2,7 @@ package aggregates
 
 import "time"
 
+// Transaction is the domain representation of a solana transaction.
 type Transaction struct {
 	Slot            int64
 	Signature       string

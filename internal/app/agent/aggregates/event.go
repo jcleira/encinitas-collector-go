@@ -1,5 +1,7 @@
 package aggregates
 
+import "time"
+
 // Event represents an event coming from browser/mobile, including both
 // request and response data.
 type Event struct {
@@ -9,13 +11,14 @@ type Event struct {
 	Handled           interface{}
 	ReplacesClientID  *string
 	ResultingClientID string
-	Duration          int64
+	EventTime         time.Time
 	Request           *Request
 	Response          *Response
 }
 
 // Request struct represents a browser/mobile request.
 type Request struct {
+	RequestTime    time.Time
 	Body           *string
 	BodyUsed       bool
 	Cache          string
@@ -34,6 +37,7 @@ type Request struct {
 
 // Response struct represents a browser/mobile response.
 type Response struct {
+	ResponseTime time.Time
 	Body         *string
 	BodyUsed     bool
 	Headers      interface{}

@@ -16,11 +16,11 @@ const (
 // SubscribeToAgentTransactions subscribes to the 'solana_transactions' channel and listens
 // for messages.
 func (r *Repository) SubscribeToTransactions(
-	ctx context.Context) (chan<- aggregates.Transaction, chan<- error) {
+	ctx context.Context) (chan aggregates.Transaction, chan error) {
 	pubsub := r.client.Subscribe(ctx, channel)
 
-	transactionChannel := make(chan<- aggregates.Transaction)
-	errorChannel := make(chan<- error)
+	transactionChannel := make(chan aggregates.Transaction)
+	errorChannel := make(chan error)
 
 	redisChannel := pubsub.Channel()
 	go func() {
@@ -33,6 +33,8 @@ func (r *Repository) SubscribeToTransactions(
 					errorChannel <- fmt.Errorf("json.Unmarshal: %w", err)
 					continue
 				}
+
+				transactionChannel <- redisTransaction.toAggregate()
 
 			case <-ctx.Done():
 				return
