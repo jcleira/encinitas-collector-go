@@ -10,23 +10,21 @@ import (
 )
 
 const (
-	selectTransactionByUpdatedOn = `
-SELECT * FROM transactions WHERE updated_on > ?
+	selectTransactionsByProcessedAt = `
+SELECT * FROM encinitas_transactions WHERE processed_at is NULL
 `
-	insertTransaction = `
-INSERT INTO transactions
-VALUES
-`
-	getTransaction = `
-SELECT * FROM transactions WHERE id = ?;
+	updateTransactionProcessedAt = `
+UPDATE encinitas_transactions
+SET processed_at = :processed_at
+WHERE signature = :signature;
 `
 )
 
-func (r *Repository) SelectTransactionByUpdatedOn(
-	ctx context.Context, updatedOn int64) ([]aggregates.Transaction, error) {
+func (r *Repository) SelectTransactionsByProcessedAt(
+	ctx context.Context) ([]aggregates.Transaction, error) {
 	var dbTransactions dbTransactions
-	err := r.db.SelectContext(ctx, &dbTransactions, selectTransactionByUpdatedOn, updatedOn)
-	if err != nil {
+	if err := r.db.SelectContext(ctx,
+		&dbTransactions, selectTransactionsByProcessedAt); err != nil {
 		return nil, fmt.Errorf("r.db.SelectContext, err: %w", err)
 	}
 
@@ -38,11 +36,13 @@ func (r *Repository) SelectTransactionByUpdatedOn(
 	return transactions, nil
 }
 
-func (r *Repository) InsertTransaction(ctx context.Context, e aggregates.Transaction) error {
-	dbTransaction := dbTransactionFromAggregate(e)
-
-	_, err := sqlx.NamedExec(r.db, insertTransaction, dbTransaction)
-	if err != nil {
+func (r *Repository) UpdateTransactionProcessedAt(
+	ctx context.Context, signature string, processedAt time.Time) error {
+	if _, err := sqlx.NamedExec(r.db, updateTransactionProcessedAt,
+		map[string]interface{}{
+			"processed_at": processedAt,
+			"signature":    signature,
+		}); err != nil {
 		return fmt.Errorf("sqlx.NamedExec, err: %w", err)
 	}
 
@@ -50,15 +50,20 @@ func (r *Repository) InsertTransaction(ctx context.Context, e aggregates.Transac
 }
 
 type dbTransaction struct {
-	Slot         int64     `db:"slot"`
-	Signature    []byte    `db:"signature"`
-	IsVote       bool      `db:"is_vote"`
-	MessageType  int16     `db:"message_type"`
-	Signatures   [][]byte  `db:"signatures"`
-	MessageHash  []byte    `db:"message_hash"`
-	WriteVersion int64     `db:"write_version"`
-	UpdatedOn    time.Time `db:"updated_on"`
-	Index        int64     `db:"index"`
+	Slot            int64      `db:"slot"`
+	Signature       string     `db:"signature"`
+	IsVote          bool       `db:"is_vote"`
+	MessageType     int        `db:"message_type"`
+	LegacyMessage   string     `db:"legacy_message"`
+	V0LoadedMessage *string    `db:"v0_loaded_message"`
+	Signatures      string     `db:"signatures"`
+	MessageHash     []byte     `db:"message_hash"`
+	Meta            string     `db:"meta"`
+	WriteVersion    int64      `db:"write_version"`
+	UpdatedOn       time.Time  `db:"updated_on"`
+	TxnIndex        int64      `db:"txn_index"`
+	InsertedAt      time.Time  `db:"inserted_at"`
+	ProcessedAt     *time.Time `db:"processed_at,omitempty"`
 }
 
 type dbTransactions []dbTransaction
@@ -73,7 +78,8 @@ func (dbe dbTransaction) toAggregate() aggregates.Transaction {
 		MessageHash:  dbe.MessageHash,
 		WriteVersion: dbe.WriteVersion,
 		UpdatedOn:    dbe.UpdatedOn,
-		Index:        dbe.Index,
+		TxnIndex:     dbe.TxnIndex,
+		ProcessedAt:  dbe.ProcessedAt,
 	}
 }
 
@@ -87,6 +93,7 @@ func dbTransactionFromAggregate(e aggregates.Transaction) dbTransaction {
 		MessageHash:  e.MessageHash,
 		WriteVersion: e.WriteVersion,
 		UpdatedOn:    e.UpdatedOn,
-		Index:        e.Index,
+		TxnIndex:     e.TxnIndex,
+		ProcessedAt:  e.ProcessedAt,
 	}
 }

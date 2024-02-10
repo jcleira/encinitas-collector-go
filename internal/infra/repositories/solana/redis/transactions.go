@@ -9,7 +9,8 @@ import (
 )
 
 const (
-	channel = "solana_transactions"
+	channel      = "solana_transactions"
+	updatedOnKey = "solana_transactions_updated_on"
 )
 
 // SubscribeToAgentTransactions subscribes to the 'solana_transactions' channel and listens
@@ -58,4 +59,23 @@ func (r *Repository) PublishTransaction(
 	}
 
 	return nil
+}
+
+// SetUpdatedOn sets the updatedOn value in the Redis database.
+func (r *Repository) SetUpdatedOn(ctx context.Context, updatedOn int64) error {
+	if err := r.client.Set(ctx, updatedOnKey, updatedOn, 0).Err(); err != nil {
+		return fmt.Errorf("client.Set: %w", err)
+	}
+
+	return nil
+}
+
+// GetUpdatedOn gets the updatedOn value from the Redis database.
+func (r *Repository) GetUpdatedOn(ctx context.Context) (int64, error) {
+	updatedOn, err := r.client.Get(ctx, updatedOnKey).Int64()
+	if err != nil {
+		return 0, fmt.Errorf("client.Get: %w", err)
+	}
+
+	return updatedOn, nil
 }

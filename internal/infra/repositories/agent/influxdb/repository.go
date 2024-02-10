@@ -32,7 +32,7 @@ func (r *Repository) WriteEvent(
 	writeAPI := r.client.WriteAPI(r.organization, r.bucket)
 
 	p := influxdb.NewPointWithMeasurement("events").
-		AddTag("id", event.ID.String()).
+		AddTag("id", event.ID).
 		AddField("browser_id", event.BrowserID).
 		AddField("client_id", event.ClientID).
 		SetTime(time.Now())

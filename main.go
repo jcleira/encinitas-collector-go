@@ -4,36 +4,39 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/jmoiron/sqlx"
+	_ "github.com/lib/pq"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/redis/go-redis/v9"
-	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/jcleira/encinitas-collector-go/config"
 	agentServices "github.com/jcleira/encinitas-collector-go/internal/app/agent/services"
+	solanaServices "github.com/jcleira/encinitas-collector-go/internal/app/solana/services"
 	agentHandlers "github.com/jcleira/encinitas-collector-go/internal/infra/http/agent/handlers"
 	agentRepositoriesRedis "github.com/jcleira/encinitas-collector-go/internal/infra/repositories/agent/redis"
+	solanaRepositoriesRedis "github.com/jcleira/encinitas-collector-go/internal/infra/repositories/solana/redis"
+	solanaRepositoriesSQL "github.com/jcleira/encinitas-collector-go/internal/infra/repositories/solana/sql"
 )
 
 var errSignalQuit = errors.New("signal quit")
 
 func main() {
-	logger, err := zap.NewProduction()
-	if err != nil {
-		log.Fatal("can't initialize zap logger: ", err)
-	}
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
 
 	var config config.Config
-	err = envconfig.Process("", &config)
-	if err != nil {
-		logger.Fatal("can't process envconfig: ", zap.Error(err))
+	if err := envconfig.Process("", &config); err != nil {
+		slog.Error("can't process envconfig: ", err)
+		os.Exit(1)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -45,7 +48,42 @@ func main() {
 		DB:       config.Redis.DB,
 	})
 
+	posgresDNS := config.Postgres.URL()
+
+	fmt.Println(posgresDNS)
+
+	sqlx, err := sqlx.Connect("postgres", posgresDNS)
+	if err != nil {
+		slog.Error("can't connect to postgres: ", err)
+		os.Exit(1)
+	}
+
 	g, ctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		eventCollector := agentServices.NewEventCollector(
+			agentRepositoriesRedis.New(redisClient),
+		)
+
+		logger.Info("starting event collector")
+		eventCollector.Collect(ctx)
+		logger.Info("event collector stopped")
+
+		return nil
+	})
+
+	g.Go(func() error {
+		transactionsCollector := solanaServices.NewTransactionsCollector(
+			solanaRepositoriesSQL.New(sqlx),
+			solanaRepositoriesRedis.New(redisClient),
+		)
+
+		logger.Info("starting transactions collector")
+		transactionsCollector.Collect(ctx)
+		logger.Info("transactions collector stopped")
+
+		return nil
+	})
 
 	g.Go(func() error {
 		router := gin.Default()
@@ -77,6 +115,7 @@ func main() {
 
 	err = g.Wait()
 	if !errors.Is(err, errSignalQuit) {
-		logger.Fatal("error while waiting for errgroup: ", zap.Error(err))
+		slog.Error("error while waiting for errgroup: ", err)
+		os.Exit(1)
 	}
 }

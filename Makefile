@@ -4,3 +4,6 @@ mocks:
 
 test:
 	go test -mod=vendor -race -cover ./...
+
+run:
+	docker-compose up --build -d
