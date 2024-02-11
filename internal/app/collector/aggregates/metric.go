@@ -1,5 +1,7 @@
 package aggregates
 
+import "time"
+
 // Metric represents a metric event which aggregates information coming from
 // both the Solana blockchain and agents (browser/mobile).
 type Metric struct {
@@ -9,3 +11,47 @@ type Metric struct {
 	RPCTime    int64
 	SolanaTime int64
 }
+
+// Type represents the type of metric.
+type Type string
+
+const (
+	// TypeRPCTime represents the type of metric for the RPC time.
+	TypeRPCTime Type = "rpc_time"
+
+	// TypeSolanaTime represents the type of metric for the Solana time.
+	TypeSolanaTime Type = "solana_time"
+)
+
+// PerformanceResult represents a metric result.
+type PerformanceResult struct {
+	Time  time.Time
+	Type  Type
+	Value float64
+}
+
+// PerformanceResults represents a slice of PerformanceResult.
+type PerformanceResults []PerformanceResult
+
+// ThroughputResult represents a throughput result.
+type ThroughputResult struct {
+	Time  time.Time
+	Value int64
+}
+
+// ThroughputResults represents a slice of ThroughputResult.
+type ThroughputResults []ThroughputResult
+
+type ApdexMetric struct {
+	Time  time.Time
+	Value int64
+}
+
+// ApdexResult represents an Apdex result.
+type ApdexResult struct {
+	Time  time.Time
+	Value float64
+}
+
+// ApdexResults represents a slice of ApdexResult.
+type ApdexResults []ApdexResult

@@ -24,8 +24,9 @@ import (
 	collectorServices "github.com/jcleira/encinitas-collector-go/internal/app/collector/services"
 	solanaServices "github.com/jcleira/encinitas-collector-go/internal/app/solana/services"
 	agentHandlers "github.com/jcleira/encinitas-collector-go/internal/infra/http/agent/handlers"
+	metricsHandlers "github.com/jcleira/encinitas-collector-go/internal/infra/http/metrics/handlers"
 	agentRepositoriesRedis "github.com/jcleira/encinitas-collector-go/internal/infra/repositories/agent/redis"
-	collectorRepositoriesInfluxDB "github.com/jcleira/encinitas-collector-go/internal/infra/repositories/collector/influxdb"
+	collectorRepositoriesInflux "github.com/jcleira/encinitas-collector-go/internal/infra/repositories/collector/influx"
 	solanaRepositoriesRedis "github.com/jcleira/encinitas-collector-go/internal/infra/repositories/solana/redis"
 	solanaRepositoriesSQL "github.com/jcleira/encinitas-collector-go/internal/infra/repositories/solana/sql"
 )
@@ -57,7 +58,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	influxDB := influxdb.NewClient(config.InfluxDB.URL, config.InfluxDB.Token)
+	influx := influxdb.NewClient(config.InfluxDB.URL, config.InfluxDB.Token)
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -90,7 +91,7 @@ func main() {
 		ingester := collectorServices.NewIngester(
 			solanaRepositoriesRedis.New(redisClient),
 			agentRepositoriesRedis.New(redisClient),
-			collectorRepositoriesInfluxDB.New(influxDB),
+			collectorRepositoriesInflux.New(influx),
 		)
 
 		logger.Info("starting ingester")
@@ -111,6 +112,13 @@ func main() {
 				),
 			).Handle,
 		)
+
+		router.GET("/metrics/query",
+			metricsHandlers.NewMetricsRetriever(
+				collectorRepositoriesInflux.New(influx),
+			).Handle,
+		)
+
 		return router.Run(":3001")
 	})
 
