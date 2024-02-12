@@ -8,7 +8,8 @@ import (
 	"time"
 
 	influxdb "github.com/influxdata/influxdb-client-go/v2"
-	"github.com/jcleira/encinitas-collector-go/internal/app/collector/aggregates"
+
+	"github.com/jcleira/encinitas-collector-go/internal/app/metrics/aggregates"
 )
 
 const (
