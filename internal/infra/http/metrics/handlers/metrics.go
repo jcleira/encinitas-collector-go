@@ -5,7 +5,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jcleira/encinitas-collector-go/internal/app/collector/aggregates"
+
+	"github.com/jcleira/encinitas-collector-go/internal/app/metrics/aggregates"
 )
 
 // metricsRetriever defines the methods needed to retrievetmetrics.

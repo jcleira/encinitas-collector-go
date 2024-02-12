@@ -8,8 +8,9 @@ import (
 	"time"
 
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
+
 	"github.com/jcleira/encinitas-collector-go/config"
-	"github.com/jcleira/encinitas-collector-go/internal/app/collector/aggregates"
+	"github.com/jcleira/encinitas-collector-go/internal/app/metrics/aggregates"
 	"github.com/kelseyhightower/envconfig"
 )
 

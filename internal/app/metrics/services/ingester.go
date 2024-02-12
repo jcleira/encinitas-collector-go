@@ -9,7 +9,7 @@ import (
 	"github.com/btcsuite/btcutil/base58"
 
 	agentAggregates "github.com/jcleira/encinitas-collector-go/internal/app/agent/aggregates"
-	aggregates "github.com/jcleira/encinitas-collector-go/internal/app/collector/aggregates"
+	aggregates "github.com/jcleira/encinitas-collector-go/internal/app/metrics/aggregates"
 	solanaAggregates "github.com/jcleira/encinitas-collector-go/internal/app/solana/aggregates"
 )
 
