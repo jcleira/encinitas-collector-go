@@ -2,9 +2,13 @@ package services
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log/slog"
+
+	bin "github.com/gagliardetto/binary"
+	solana "github.com/gagliardetto/solana-go"
 
 	"github.com/jcleira/encinitas-collector-go/internal/app/agent/aggregates"
 )
@@ -47,7 +51,9 @@ func (ec *EventCollector) Collect(ctx context.Context) {
 			}
 
 			solanaRequestBody := struct {
-				Method string `json:"method"`
+				Method  string        `json:"method"`
+				JsonRPC string        `json:"jsonrpc"`
+				Params  []interface{} `json:"params"`
 			}{}
 
 			if err := json.Unmarshal([]byte(*event.Request.Body), &solanaRequestBody); err != nil {
@@ -58,6 +64,39 @@ func (ec *EventCollector) Collect(ctx context.Context) {
 
 			if solanaRequestBody.Method != "sendTransaction" {
 				continue
+			}
+
+			if len(solanaRequestBody.Params) > 0 {
+				if transactionData, ok := solanaRequestBody.Params[0].(string); ok {
+					// We don't need to decode the transaction signature, we just
+					// need to store it.
+
+					data, err := base64.StdEncoding.DecodeString(transactionData)
+					if err != nil {
+						slog.Error(
+							"can't decode transaction base64: ",
+							slog.String("transactionData", transactionData),
+							err)
+					}
+
+					decodedTx, err := solana.TransactionFromDecoder(bin.NewBinDecoder(data))
+					if err != nil {
+						slog.Error("can't decode transaction: ", err)
+					}
+
+					programIDs := make([]string, 0)
+
+					for _, instruction := range decodedTx.Message.Instructions {
+						programID, err := decodedTx.ResolveProgramIDIndex(instruction.ProgramIDIndex)
+						if err != nil {
+							slog.Error("can't resolve program ID index: ", err)
+						}
+
+						programIDs = append(programIDs, programID.String())
+					}
+
+					event.ProgramIDs = programIDs
+				}
 			}
 
 			solanaResponseBody := struct {

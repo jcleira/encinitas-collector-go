@@ -13,26 +13,38 @@ service:
   port: 80
 
 ingress:
-  enabled: true
-  className: ""
-  annotations:
-    kubernetes.io/ingress.class: nginx
-  hosts:
-    - host: sales-ai-pre.bysidecar.me
-      paths:
-        - path: /
-          pathType: Prefix
-  tls:
-    - secretName: tls-sales-ai-pre-bysidecar-me
-      hosts:
-        - sales-ai-pre.bysidecar.me
+  enabled: false
+
 env:
 - name: REDIS_ADDR
-  value: ""
+  value: "redis-master.encinitas.svc.cluster.local:6379"
 - name: REDIS_PASS
-  value: ""
+  value: "zAFR1Y2emC"
 - name: REDIS_DB
-  value: 0
+  value: "0"
+- name: POSTGRES_HOST
+  value: "100.71.248.65"
+- name: POSTGRES_PORT
+  value: "5432"
+- name: POSTGRES_USER
+  valueFrom:
+    secretKeyRef:
+      name: postgres
+      key: user
+- name: POSTGRES_PASS
+  valueFrom:
+    secretKeyRef:
+      name: postgres
+      key: pass
+- name: POSTGRES_DB
+  value: solana
+- name: INFLUXDB_URL
+  value: http://influx:8086
+- name: INFLUXDB_TOKEN
+  valueFrom:
+    secretKeyRef:
+      name: influx
+      key: token
 
 autoscaling:
   enabled: false

@@ -14,6 +14,7 @@ type metricsRetriever interface {
 	QueryPerformance(context.Context) (aggregates.PerformanceResults, error)
 	QueryThroughput(context.Context) (aggregates.ThroughputResults, error)
 	QueryApdex(context.Context) (aggregates.ApdexResults, error)
+	QueryErrors(context.Context) (aggregates.ErrorResults, error)
 }
 
 // MetricsRetrieverHandler defines the dependencies to retrieve metrics.
@@ -52,6 +53,13 @@ func (ech *MetricsRetrieverHandler) Handle(c *gin.Context) {
 		return
 	}
 
+	errorMetrics, err := ech.metricsRetriever.QueryErrors(
+		c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	httpMetricsResponse := struct {
 		Performance struct {
 			RPC    [][]interface{} `json:"rpc"`
@@ -59,6 +67,7 @@ func (ech *MetricsRetrieverHandler) Handle(c *gin.Context) {
 		} `json:"performance"`
 		Throughput [][]interface{} `json:"throughput"`
 		Apdex      [][]interface{} `json:"apdex"`
+		Errors     [][]interface{} `json:"errors"`
 	}{}
 
 	for _, metric := range performanceMetrics {
@@ -82,6 +91,12 @@ func (ech *MetricsRetrieverHandler) Handle(c *gin.Context) {
 	for _, metric := range apdexMetrics {
 		httpMetricsResponse.Apdex = append(
 			httpMetricsResponse.Apdex,
+			[]interface{}{metric.Time, metric.Value})
+	}
+
+	for _, metric := range errorMetrics {
+		httpMetricsResponse.Errors = append(
+			httpMetricsResponse.Errors,
 			[]interface{}{metric.Time, metric.Value})
 	}
 

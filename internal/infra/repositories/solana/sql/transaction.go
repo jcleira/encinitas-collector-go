@@ -11,7 +11,7 @@ import (
 
 const (
 	selectTransactionsByProcessedAt = `
-SELECT * FROM encinitas_transactions WHERE processed_at is NULL
+SELECT * FROM encinitas_transactions WHERE processed_at is NULL LIMIT 1000;
 `
 	updateTransactionProcessedAt = `
 UPDATE encinitas_transactions
@@ -64,6 +64,7 @@ type dbTransaction struct {
 	TxnIndex        int64      `db:"txn_index"`
 	InsertedAt      time.Time  `db:"inserted_at"`
 	ProcessedAt     *time.Time `db:"processed_at,omitempty"`
+	ErrorInfo       *string    `db:"error_info,omitempty"`
 }
 
 type dbTransactions []dbTransaction
@@ -76,9 +77,11 @@ func (dbe dbTransaction) toAggregate() aggregates.Transaction {
 		MessageType:  dbe.MessageType,
 		Signatures:   dbe.Signatures,
 		MessageHash:  dbe.MessageHash,
+		Meta:         dbe.Meta,
 		WriteVersion: dbe.WriteVersion,
 		UpdatedOn:    dbe.UpdatedOn,
 		TxnIndex:     dbe.TxnIndex,
+		ErrorInfo:    dbe.ErrorInfo,
 		ProcessedAt:  dbe.ProcessedAt,
 	}
 }
@@ -91,9 +94,11 @@ func dbTransactionFromAggregate(e aggregates.Transaction) dbTransaction {
 		MessageType:  e.MessageType,
 		Signatures:   e.Signatures,
 		MessageHash:  e.MessageHash,
+		Meta:         e.Meta,
 		WriteVersion: e.WriteVersion,
 		UpdatedOn:    e.UpdatedOn,
 		TxnIndex:     e.TxnIndex,
+		ErrorInfo:    e.ErrorInfo,
 		ProcessedAt:  e.ProcessedAt,
 	}
 }

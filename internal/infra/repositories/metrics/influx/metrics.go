@@ -27,6 +27,7 @@ func (r *Repository) WriteMetric(ctx context.Context,
 		AddTag("signature", metric.Signature).
 		AddField("rpc_time", metric.RPCTime).
 		AddField("solana_time", metric.SolanaTime).
+		AddField("error", metric.Error).
 		SetTime(time.Now())
 
 	writeAPI.WritePoint(p)
@@ -232,4 +233,108 @@ func (r *Repository) QueryApdex(ctx context.Context) (aggregates.ApdexResults, e
 	})
 
 	return apdexResults, nil
+}
+
+func (r *Repository) QueryErrors(
+	ctx context.Context) (aggregates.ErrorResults, error) {
+	influxErrors, err := r.client.QueryAPI(organization).Query(ctx,
+		fmt.Sprintf(`
+			from(bucket: "%s")
+			|> range(start: -2d)
+			|> filter(fn: (r) => r._field == "error" and r._value == true)
+			|> group(columns: ["_time"])
+			|> group()
+			|> aggregateWindow(every: 30m, fn: count, createEmpty: false)
+			|> yield(name: "errors")`, r.bucket),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("r.client.QueryAPI(organization).Query: %w", err)
+	}
+
+	influxTotals, err := r.client.QueryAPI(organization).Query(ctx,
+		fmt.Sprintf(`
+			from(bucket: "%s")
+			|> range(start: -2d)
+			|> filter(fn: (r) => r._measurement == "events")
+			|> filter(fn: (r) => r._field == "error")
+			|> group(columns: ["_time"])
+			|> group()
+			|> aggregateWindow(every: 30m, fn: count, createEmpty: false)
+			|> yield(name: "total")`, r.bucket),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("r.client.QueryAPI(organization).Query: %w", err)
+	}
+
+	errorMetricMap := make(map[string]aggregates.ErrorResult)
+
+	startTime := time.Now().Add(-48 * time.Hour).Truncate(30 * time.Minute)
+	for t := startTime; t.Before(time.Now()); t = t.Add(30 * time.Minute) {
+		timeStr := t.Format(time.RFC3339)
+		errorMetricMap[timeStr] = aggregates.ErrorResult{
+			Time: t,
+		}
+	}
+
+	for influxErrors.Next() {
+		influxError := influxErrors.Record()
+		influxErrorTimeStr := influxError.Time().Format(time.RFC3339)
+		errorResult, ok := errorMetricMap[influxErrorTimeStr]
+		if !ok {
+			slog.Error(
+				"result.Time not found in apdexMetricMap",
+				slog.Time("apdexMetric", errorResult.Time))
+			continue
+		}
+
+		errorResult.Time = influxError.Time()
+		if influxError.Value() != nil {
+			if value, ok := influxError.Value().(int64); ok {
+				errorResult.TotalErrors = value
+			} else {
+				slog.Error("result.Record().Value() is not a int64", influxError.Value())
+			}
+		}
+
+		errorMetricMap[influxErrorTimeStr] = errorResult
+	}
+
+	if influxErrors.Err() != nil {
+		return nil, fmt.Errorf("result.Err: %w", influxErrors.Err())
+	}
+
+	for influxTotals.Next() {
+		influxTotal := influxTotals.Record()
+
+		influxTotalTimeStr := influxTotal.Time().Format(time.RFC3339)
+		errorResult, ok := errorMetricMap[influxTotalTimeStr]
+		if !ok {
+			slog.Error(
+				"result.Time not found in apdexMetricMap",
+				slog.Time("apdexMetric", errorResult.Time))
+			continue
+		}
+
+		if influxTotal.Value() != nil {
+			if value, ok := influxTotal.Value().(int64); ok {
+				errorResult.TotalCount = value
+			} else {
+				slog.Error("result.Record().Value() is not a int64", influxTotal.Value())
+			}
+		}
+
+		errorResult.Value = float64(errorResult.TotalErrors) / float64(errorResult.TotalCount)
+		errorMetricMap[influxTotalTimeStr] = errorResult
+	}
+
+	errorsResults := make([]aggregates.ErrorResult, 0)
+	for _, errorResult := range errorMetricMap {
+		errorsResults = append(errorsResults, errorResult)
+	}
+
+	sort.Slice(errorsResults, func(i, j int) bool {
+		return errorsResults[i].Time.Before(errorsResults[j].Time)
+	})
+
+	return errorsResults, nil
 }

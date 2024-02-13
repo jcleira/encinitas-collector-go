@@ -14,6 +14,9 @@ type Event struct {
 	EventTime         time.Time
 	Request           *Request
 	Response          *Response
+
+	// Processed Information
+	ProgramIDs []string
 }
 
 // Request struct represents a browser/mobile request.
