@@ -21,14 +21,11 @@ import (
 
 	"github.com/jcleira/encinitas-collector-go/config"
 	agentServices "github.com/jcleira/encinitas-collector-go/internal/app/agent/services"
-	managerServices "github.com/jcleira/encinitas-collector-go/internal/app/manager/services"
 	metricsServices "github.com/jcleira/encinitas-collector-go/internal/app/metrics/services"
 	solanaServices "github.com/jcleira/encinitas-collector-go/internal/app/solana/services"
 	agentHandlers "github.com/jcleira/encinitas-collector-go/internal/infra/http/agent/handlers"
-	managerHandlers "github.com/jcleira/encinitas-collector-go/internal/infra/http/manager/handlers"
 	metricsHandlers "github.com/jcleira/encinitas-collector-go/internal/infra/http/metrics/handlers"
 	agentRepositoriesRedis "github.com/jcleira/encinitas-collector-go/internal/infra/repositories/agent/redis"
-	managerRepositoriesSQL "github.com/jcleira/encinitas-collector-go/internal/infra/repositories/manager/sql"
 	metricsRepositoriesInflux "github.com/jcleira/encinitas-collector-go/internal/infra/repositories/metrics/influx"
 	solanaRepositoriesRedis "github.com/jcleira/encinitas-collector-go/internal/infra/repositories/solana/redis"
 	solanaRepositoriesSQL "github.com/jcleira/encinitas-collector-go/internal/infra/repositories/solana/sql"
@@ -119,22 +116,6 @@ func main() {
 		router.GET("/metrics/query",
 			metricsHandlers.NewMetricsRetriever(
 				metricsRepositoriesInflux.New(influx),
-			).Handle,
-		)
-
-		router.GET("/manager/programs",
-			managerHandlers.NewProgramGetterHandler(
-				managerServices.NewProgramGetter(
-					managerRepositoriesSQL.New(sqlx),
-				),
-			).Handle,
-		)
-
-		router.POST("/manager/programs",
-			managerHandlers.NewProgramsCreatorHandler(
-				managerServices.NewProgramCreator(
-					managerRepositoriesSQL.New(sqlx),
-				),
 			).Handle,
 		)
 

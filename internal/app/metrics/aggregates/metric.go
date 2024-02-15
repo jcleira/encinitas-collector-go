@@ -10,7 +10,6 @@ type Metric struct {
 	Signature  string
 	RPCTime    int64
 	SolanaTime int64
-	Error      bool
 }
 
 // Type represents the type of metric.
@@ -56,14 +55,3 @@ type ApdexResult struct {
 
 // ApdexResults represents a slice of ApdexResult.
 type ApdexResults []ApdexResult
-
-// ErrorResult represents an Error result.
-type ErrorResult struct {
-	Time        time.Time
-	TotalErrors int64
-	TotalCount  int64
-	Value       float64
-}
-
-// ErrorResults represents a slice of ErrorResult.
-type ErrorResults []ErrorResult

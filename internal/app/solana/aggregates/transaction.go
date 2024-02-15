@@ -16,8 +16,5 @@ type Transaction struct {
 	WriteVersion    int64
 	UpdatedOn       time.Time
 	TxnIndex        int64
-	// I'm going to keep the error info as a pointer to a string, for the
-	// moment, till we get a transaction with an error.
-	ErrorInfo   *string
-	ProcessedAt *time.Time
+	ProcessedAt     *time.Time
 }
