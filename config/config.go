@@ -27,7 +27,7 @@ type Postgres struct {
 	Pass             string        `envconfig:"POSTGRES_PASS" default:""`
 	DB               string        `envconfig:"POSTGRES_DB" default:""`
 	SSLMode          string        `envconfig:"POSTGRES_SSL_MODE" default:"disable"`
-	StatementTimeout time.Duration `envconfig:"POSTGRES_STATEMENT_TIMEOUT" default:"5s"`
+	StatementTimeout time.Duration `envconfig:"POSTGRES_STATEMENT_TIMEOUT" default:"500s"`
 }
 
 func (p Postgres) URL() string {

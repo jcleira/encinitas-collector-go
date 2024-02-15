@@ -18,6 +18,9 @@ type redisEvent struct {
 	EventTime         time.Time      `json:"event_time"`
 	Request           *redisRequest  `json:"request,omitempty"`
 	Response          *redisResponse `json:"response,omitempty"`
+
+	// Processed Information
+	ProgramIDs []string `json:"program_ids"`
 }
 
 // redisRequest struct represents the redis version of a browser/mobile request.
@@ -65,6 +68,9 @@ func (r *redisEvent) toAggregate() aggregates.Event {
 		EventTime:         r.EventTime,
 		Request:           r.Request.toAggregate(),
 		Response:          r.Response.toAggregate(),
+
+		// Processed Information
+		ProgramIDs: r.ProgramIDs,
 	}
 }
 
@@ -124,6 +130,9 @@ func redisEventFromAggregate(event aggregates.Event) redisEvent {
 		EventTime:         event.EventTime,
 		Request:           redisRequest,
 		Response:          redisResponse,
+
+		// Processed Information
+		ProgramIDs: event.ProgramIDs,
 	}
 }
 

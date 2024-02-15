@@ -59,7 +59,7 @@ func (tc *TransactionsCollector) Collect(ctx context.Context) {
 
 			for _, transaction := range transactions {
 				if err := tc.redisRepository.PublishTransaction(ctx, transaction); err != nil {
-					slog.Error("tc.sqlRepository.PublishTransaction", err)
+					slog.Error("tc.redisRepository.PublishTransaction", err)
 				}
 
 				if err := tc.sqlRepository.UpdateTransactionProcessedAt(
