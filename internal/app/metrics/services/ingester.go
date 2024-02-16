@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"math/rand"
@@ -29,12 +30,17 @@ type influxDBRepository interface {
 	WriteMetric(context.Context, aggregates.Metric) error
 }
 
+type solanaSQLRepository interface {
+	InsertTransactionDetail(context.Context, solanaAggregates.TransactionDetail) error
+}
+
 // Ingester is a service that ingests information coming from both the Solana
 // blockchain and agents events (browser/mobile).
 type Ingester struct {
 	solanaRedisRepository solanaRedisRepository
 	agentRedisRepository  agentRedisRepository
 	influxDBRepository    influxDBRepository
+	solanaSQLRepository   solanaSQLRepository
 }
 
 // NewIngester creates a new instance of the Ingester service.
@@ -42,11 +48,13 @@ func NewIngester(
 	solanaRedisRepository solanaRedisRepository,
 	agentRedisRepository agentRedisRepository,
 	influxDBRepository influxDBRepository,
+	solanaSQLRepository solanaSQLRepository,
 ) *Ingester {
 	return &Ingester{
 		solanaRedisRepository: solanaRedisRepository,
 		agentRedisRepository:  agentRedisRepository,
 		influxDBRepository:    influxDBRepository,
+		solanaSQLRepository:   solanaSQLRepository,
 	}
 }
 
@@ -128,6 +136,40 @@ func (i *Ingester) Ingest(ctx context.Context) {
 			if err = i.influxDBRepository.WriteMetric(ctx, metric); err != nil {
 				slog.Error("error while writing metric to influxdb", err)
 				continue
+			}
+
+			if transaction.LegacyMessage == "" {
+				slog.Error("transaction.LegacyMessage is empty")
+				continue
+			}
+
+			transactionData := solanaAggregates.TransactionData{}
+			if err := json.Unmarshal([]byte(transaction.LegacyMessage), &transactionData); err != nil {
+				slog.Error("error while unmarshalling transaction data", err)
+				continue
+			}
+
+			for _, instruction := range transactionData.Instructions {
+				programAccountKey := transactionData.AccountKeys[instruction.ProgramIDIndex]
+				bytes, err := hex.DecodeString(programAccountKey[2:])
+				if err != nil {
+					slog.Error("error while decoding program account", err)
+					continue
+				}
+
+				transactionDetail := solanaAggregates.TransactionDetail{
+					ProgramAddress: base58.Encode(bytes),
+					UpdatedOn:      transaction.UpdatedOn,
+					RPCTime:        metric.RPCTime,
+					SolanaTime:     metric.SolanaTime,
+					TotalTime:      metric.RPCTime + metric.SolanaTime,
+				}
+
+				if err := i.solanaSQLRepository.InsertTransactionDetail(
+					ctx, transactionDetail); err != nil {
+					slog.Error("error while inserting transaction detail", err)
+					continue
+				}
 			}
 
 		case err := <-errors:
