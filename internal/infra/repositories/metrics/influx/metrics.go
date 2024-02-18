@@ -17,10 +17,10 @@ const (
 	apdexTolerable    = 1500
 )
 
-// WriteMetric writes a metric metric to the InfluxDB server.
-func (r *Repository) WriteMetric(ctx context.Context,
-	metric aggregates.Metric) error {
-	writeAPI := r.client.WriteAPI(r.organization, r.bucket)
+// WriteTransaction writes a transaction metric to the InfluxDB server.
+func (r *Repository) WriteTransaction(ctx context.Context,
+	metric aggregates.TransactionMetric) error {
+	writeAPI := r.client.WriteAPI(r.organization, transactionsBucket)
 
 	p := influxdb.NewPointWithMeasurement("events").
 		AddTag("event_ID", metric.EventID).
@@ -28,7 +28,25 @@ func (r *Repository) WriteMetric(ctx context.Context,
 		AddField("rpc_time", metric.RPCTime).
 		AddField("solana_time", metric.SolanaTime).
 		AddField("error", metric.Error).
-		SetTime(time.Now())
+		SetTime(metric.UpdatedOn)
+
+	writeAPI.WritePoint(p)
+
+	writeAPI.Flush()
+
+	return nil
+}
+
+// WriteProgram writes a program transaction metric to the InfluxDB server.
+func (r *Repository) WriteProgram(ctx context.Context,
+	metric aggregates.ProgramMetric) error {
+	writeAPI := r.client.WriteAPI(r.organization, programsBucket)
+
+	p := influxdb.NewPointWithMeasurement(metric.ProgramAddress).
+		AddTag("program_address", metric.ProgramAddress).
+		AddField("rpc_time", metric.RPCTime).
+		AddField("solana_time", metric.SolanaTime).
+		SetTime(metric.UpdatedOn)
 
 	writeAPI.WritePoint(p)
 
@@ -50,7 +68,59 @@ func (r *Repository) QueryPerformance(ctx context.Context) (aggregates.Performan
     |> filter(fn: (r) => r._field == "rpc_time"
 			or r._field == "solana_time")
 		|> group(columns: ["_field"])
-    |> aggregateWindow(every: 30m, fn: mean)`, r.bucket),
+    |> aggregateWindow(every: 30m, fn: mean)`, transactionsBucket),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("r.client.QueryAPI(organization).Query: %w", err)
+	}
+
+	performanceResults := make([]aggregates.PerformanceResult, 0)
+
+	for result.Next() {
+		performanceResult := aggregates.PerformanceResult{
+			Time: result.Record().Time(),
+		}
+
+		switch result.Record().Field() {
+		case "rpc_time":
+			performanceResult.Type = aggregates.TypeRPCTime
+		case "solana_time":
+			performanceResult.Type = aggregates.TypeSolanaTime
+		}
+
+		if result.Record().Value() != nil {
+			if value, ok := result.Record().Value().(float64); ok {
+				performanceResult.Value = value
+			} else {
+				slog.Error("result.Record().Value() is not an float64", result.Record().Value())
+			}
+		}
+
+		performanceResults = append(performanceResults, performanceResult)
+	}
+
+	if result.Err() != nil {
+		return nil, fmt.Errorf("result.Err: %w", result.Err())
+	}
+
+	return performanceResults, nil
+}
+
+// QueryProgramPerformance queries the InfluxDB server for performance metrics.
+//
+// Currently is agreggating the metrics by the mean of a fixed value which is
+// not ideal; but it's a good starting point.
+func (r *Repository) QueryProgramPerformance(
+	ctx context.Context, program string) (aggregates.PerformanceResults, error) {
+	result, err := r.client.QueryAPI(organization).Query(ctx,
+		fmt.Sprintf(`
+			from(bucket:"%s")
+    |> range(start: -2d)
+    |> filter(fn: (r) => r._measurement == "%s")
+    |> filter(fn: (r) => r._field == "rpc_time"
+			or r._field == "solana_time")
+		|> group(columns: ["_field"])
+    |> aggregateWindow(every: 30m, fn: mean)`, programsBucket, program),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("r.client.QueryAPI(organization).Query: %w", err)
@@ -100,7 +170,50 @@ func (r *Repository) QueryThroughput(ctx context.Context) (aggregates.Throughput
     |> filter(fn: (r) => r._measurement == "events")
     |> filter(fn: (r) => r._field == "rpc_time")
 		|> group()
-    |> aggregateWindow(every: 30m, fn: count)`, r.bucket),
+    |> aggregateWindow(every: 30m, fn: count)`, transactionsBucket),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("r.client.QueryAPI(organization).Query: %w", err)
+	}
+
+	throughputResults := make([]aggregates.ThroughputResult, 0)
+
+	for result.Next() {
+		throughputResult := aggregates.ThroughputResult{
+			Time: result.Record().Time(),
+		}
+
+		if result.Record().Value() != nil {
+			if value, ok := result.Record().Value().(int64); ok {
+				throughputResult.Value = value
+			} else {
+				slog.Error("result.Record().Value() is not a int64", result.Record().Value())
+			}
+		}
+
+		throughputResults = append(throughputResults, throughputResult)
+	}
+
+	if result.Err() != nil {
+		return nil, fmt.Errorf("result.Err: %w", result.Err())
+	}
+
+	return throughputResults, nil
+}
+
+// QueryProgramThroughPut queries the InfluxDB server for performance metrics.
+//
+// Currently is agreggating the metrics by the mean of a fixed value which is
+// not ideal; but it's a good starting point.
+func (r *Repository) QueryProgramThroughput(
+	ctx context.Context, programAddress string) (aggregates.ThroughputResults, error) {
+	result, err := r.client.QueryAPI(organization).Query(ctx,
+		fmt.Sprintf(
+			`from(bucket:"%s")
+    |> range(start: -2d)
+    |> filter(fn: (r) => r._measurement == "%s")
+		|> group()
+    |> aggregateWindow(every: 30m, fn: count)`, programsBucket, programAddress),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("r.client.QueryAPI(organization).Query: %w", err)
@@ -144,7 +257,7 @@ func (r *Repository) QueryApdex(ctx context.Context) (aggregates.ApdexResults, e
 		|> filter(fn: (r) => r._measurement == "events")
 		|> filter(fn: (r) => r._field == "rpc_time" or r._field == "solana_time")
 		|> group(columns: ["_time"])
-		|> aggregateWindow(every: 30m, fn: sum, createEmpty: false)`, r.bucket),
+		|> aggregateWindow(every: 30m, fn: sum, createEmpty: false)`, transactionsBucket),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("r.client.QueryAPI(organization).Query: %w", err)
@@ -245,7 +358,7 @@ func (r *Repository) QueryErrors(
 			|> group(columns: ["_time"])
 			|> group()
 			|> aggregateWindow(every: 30m, fn: count, createEmpty: false)
-			|> yield(name: "errors")`, r.bucket),
+			|> yield(name: "errors")`, transactionsBucket),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("r.client.QueryAPI(organization).Query: %w", err)
@@ -260,7 +373,7 @@ func (r *Repository) QueryErrors(
 			|> group(columns: ["_time"])
 			|> group()
 			|> aggregateWindow(every: 30m, fn: count, createEmpty: false)
-			|> yield(name: "total")`, r.bucket),
+			|> yield(name: "total")`, transactionsBucket),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("r.client.QueryAPI(organization).Query: %w", err)

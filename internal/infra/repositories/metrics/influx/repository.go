@@ -5,15 +5,15 @@ import (
 )
 
 const (
-	organization = "encinitas"
-	bucket       = "encinitas_metrics"
+	organization       = "encinitas"
+	transactionsBucket = "encinitas_metrics"
+	programsBucket     = "encinitas_program_metrics"
 )
 
 // Repository define the dependencies needed to store events in InfluxDB.
 type Repository struct {
 	client       influxdb.Client
 	organization string
-	bucket       string
 }
 
 // New creates a new instance of the InfluxDB repository.
@@ -21,7 +21,6 @@ func New(client influxdb.Client) *Repository {
 	return &Repository{
 		client:       client,
 		organization: organization,
-		bucket:       bucket,
 	}
 }
 

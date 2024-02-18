@@ -27,7 +27,8 @@ type agentRedisRepository interface {
 }
 
 type influxDBRepository interface {
-	WriteMetric(context.Context, aggregates.Metric) error
+	WriteTransaction(context.Context, aggregates.TransactionMetric) error
+	WriteProgram(context.Context, aggregates.ProgramMetric) error
 }
 
 type solanaSQLRepository interface {
@@ -65,15 +66,18 @@ func (i *Ingester) Ingest(ctx context.Context) {
 	for {
 		select {
 		case transaction := <-transactions:
+			if rand.Intn(100) < 5 {
+				continue
+			}
+
 			bytes, err := hex.DecodeString(transaction.Signature[2:])
 			if err != nil {
 				slog.Error("error while decoding transaction signature", err)
 				continue
 			}
 
-			rand.Seed(time.Now().UnixNano())
-
-			metric := aggregates.Metric{
+			metric := aggregates.TransactionMetric{
+				UpdatedOn: transaction.UpdatedOn,
 				Signature: transaction.Signature,
 				// TODO: We are setting the error rate to keep some randomness around
 				// 0.18% for now,but we should be using the error rate from the
@@ -133,7 +137,7 @@ func (i *Ingester) Ingest(ctx context.Context) {
 					event.Response.ResponseTime).Milliseconds()
 			}
 
-			if err = i.influxDBRepository.WriteMetric(ctx, metric); err != nil {
+			if err = i.influxDBRepository.WriteTransaction(ctx, metric); err != nil {
 				slog.Error("error while writing metric to influxdb", err)
 				continue
 			}
@@ -168,6 +172,17 @@ func (i *Ingester) Ingest(ctx context.Context) {
 				if err := i.solanaSQLRepository.InsertTransactionDetail(
 					ctx, transactionDetail); err != nil {
 					slog.Error("error while inserting transaction detail", err)
+					continue
+				}
+
+				if err := i.influxDBRepository.WriteProgram(ctx,
+					aggregates.ProgramMetric{
+						ProgramAddress: base58.Encode(bytes),
+						UpdatedOn:      transaction.UpdatedOn,
+						RPCTime:        metric.RPCTime,
+						SolanaTime:     metric.SolanaTime,
+					}); err != nil {
+					slog.Error("error while writing program metric to influxdb", err)
 					continue
 				}
 			}

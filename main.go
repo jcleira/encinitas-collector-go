@@ -123,6 +123,12 @@ func main() {
 			).Handle,
 		)
 
+		router.GET("/metrics/programs/query",
+			metricsHandlers.NewMetricsProgramRetrieverHandler(
+				metricsRepositoriesInflux.New(influx),
+			).Handle,
+		)
+
 		router.GET("/transactions/query",
 			metricsHandlers.NewTransactionsRetriever(
 				solanaRepositoriesSQL.New(sqlx),

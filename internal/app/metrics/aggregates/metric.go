@@ -2,15 +2,23 @@ package aggregates
 
 import "time"
 
-// Metric represents a metric event which aggregates information coming from
+// TransactionMetric represents a metric event which aggregates information coming from
 // both the Solana blockchain and agents (browser/mobile).
-type Metric struct {
-	ProgramID  string
+type TransactionMetric struct {
 	EventID    string
 	Signature  string
+	UpdatedOn  time.Time
 	RPCTime    int64
 	SolanaTime int64
 	Error      bool
+}
+
+// ProgramMetric represents a metric event which aggregates information for each instruction within the Solana Transaction.
+type ProgramMetric struct {
+	ProgramAddress string
+	UpdatedOn      time.Time
+	RPCTime        int64
+	SolanaTime     int64
 }
 
 // Type represents the type of metric.
