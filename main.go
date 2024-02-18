@@ -154,6 +154,14 @@ func main() {
 			).Handle,
 		)
 
+		router.POST("/manager/emails",
+			managerHandlers.NewEmailsCreatorHandler(
+				managerServices.NewEmailCreator(
+					managerRepositoriesSQL.New(sqlx),
+				),
+			).Handle,
+		)
+
 		return router.Run(":3001")
 	})
 
