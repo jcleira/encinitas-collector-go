@@ -36,6 +36,9 @@ func (ec *EventCollector) Collect(ctx context.Context) {
 
 	for {
 		select {
+		case <-ctx.Done():
+			return
+
 		case event := <-eventChan:
 			// For the moment we are only interested in successful responses
 			// so we can ignore the rest.
@@ -115,9 +118,6 @@ func (ec *EventCollector) Collect(ctx context.Context) {
 
 		case err := <-errChan:
 			slog.Error("error in the agent events redis repository: ", err)
-
-		case <-ctx.Done():
-			return
 		}
 	}
 }

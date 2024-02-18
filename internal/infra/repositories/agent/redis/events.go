@@ -26,6 +26,9 @@ func (r *Repository) SubscribeToEvents(
 		defer pubsub.Close()
 		for {
 			select {
+			case <-ctx.Done():
+				return
+
 			case event := <-redisChannel:
 				var redisEvent redisEvent
 				if err := json.Unmarshal([]byte(event.Payload), &redisEvent); err != nil {
@@ -34,9 +37,6 @@ func (r *Repository) SubscribeToEvents(
 				}
 
 				eventChannel <- redisEvent.toAggregate()
-
-			case <-ctx.Done():
-				return
 			}
 		}
 	}()
