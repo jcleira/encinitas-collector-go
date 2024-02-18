@@ -94,7 +94,8 @@ func main() {
 		ingester := metricsServices.NewIngester(
 			solanaRepositoriesRedis.New(redisClient),
 			agentRepositoriesRedis.New(redisClient),
-			metricsRepositoriesInflux.New(influx),
+			metricsRepositoriesInflux.New(influx, metricsRepositoriesInflux.TransactionsBucket),
+			metricsRepositoriesInflux.New(influx, metricsRepositoriesInflux.ProgramsBucket),
 			solanaRepositoriesSQL.New(sqlx),
 		)
 
@@ -119,13 +120,15 @@ func main() {
 
 		router.GET("/metrics/query",
 			metricsHandlers.NewMetricsRetriever(
-				metricsRepositoriesInflux.New(influx),
+				metricsRepositoriesInflux.New(
+					influx, metricsRepositoriesInflux.TransactionsBucket),
 			).Handle,
 		)
 
 		router.GET("/metrics/programs/query",
 			metricsHandlers.NewMetricsProgramRetrieverHandler(
-				metricsRepositoriesInflux.New(influx),
+				metricsRepositoriesInflux.New(
+					influx, metricsRepositoriesInflux.ProgramsBucket),
 			).Handle,
 		)
 

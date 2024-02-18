@@ -27,6 +27,9 @@ func (r *Repository) SubscribeToTransactions(
 		defer pubsub.Close()
 		for {
 			select {
+			case <-ctx.Done():
+				return
+
 			case transaction := <-redisChannel:
 				var redisTransaction redisTransaction
 				if err := json.Unmarshal([]byte(transaction.Payload), &redisTransaction); err != nil {
@@ -35,9 +38,6 @@ func (r *Repository) SubscribeToTransactions(
 				}
 
 				transactionChannel <- redisTransaction.toAggregate()
-
-			case <-ctx.Done():
-				return
 			}
 		}
 	}()
