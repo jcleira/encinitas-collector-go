@@ -273,60 +273,125 @@ func (r *Repository) QueryProgramThroughput(
 // Currently is agreggating the metrics by the mean of a fixed value which is
 // not ideal; but it's a good starting point.
 func (r *Repository) QueryApdex(ctx context.Context) (aggregates.ApdexResults, error) {
-	influxMetrics, err := r.client.QueryAPI(organization).Query(ctx,
+	satisfactoryMetrics, err := r.client.QueryAPI(organization).Query(ctx,
+		// TODO: This query is using only the solana time for the apdex calculation,
+		// but it should be using both the solana and rpc time.
 		fmt.Sprintf(`
 			from(bucket:"%s")
 		|> range(start: -2d)
 		|> filter(fn: (r) => r._measurement == "transactions")
-		|> filter(fn: (r) => r._field == "rpc_time_sum" or r._field == "solana_time_sum")
-		|> group(columns: ["_time"])
-		|> aggregateWindow(every: 30m, fn: sum, createEmpty: false)`, r.bucket),
+		|> filter(fn: (r) => r._field == "solana_time_mean")
+		|> filter(fn: (r) => r._value < %d)
+		|> aggregateWindow(every: 30m, fn: mean, createEmpty: false)`, r.bucket, apdexSatisfactory),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("r.client.QueryAPI(organization).Query: %w", err)
 	}
 
-	apdexMetricMap := make(map[string][]aggregates.ApdexMetric)
+	tolerableMetrics, err := r.client.QueryAPI(organization).Query(ctx,
+		// TODO: This query is using only the solana time for the apdex calculation,
+		// but it should be using both the solana and rpc time.
+		fmt.Sprintf(`
+			from(bucket:"%s")
+		|> range(start: -2d)
+		|> filter(fn: (r) => r._measurement == "transactions")
+		|> filter(fn: (r) => r._field == "solana_time_mean")
+		|> filter(fn: (r) => r._value > %d)
+		|> filter(fn: (r) => r._value < %d)
+		|> aggregateWindow(every: 30m, fn: mean, createEmpty: false)`,
+			r.bucket, apdexSatisfactory, apdexTolerable),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("r.client.QueryAPI(organization).Query: %w", err)
+	}
+
+	frustratingMetrics, err := r.client.QueryAPI(organization).Query(ctx,
+		// TODO: This query is using only the solana time for the apdex calculation,
+		// but it should be using both the solana and rpc time.
+		fmt.Sprintf(`
+			from(bucket:"%s")
+		|> range(start: -2d)
+		|> filter(fn: (r) => r._measurement == "transactions")
+		|> filter(fn: (r) => r._field == "solana_time_mean")
+		|> filter(fn: (r) => r._value > %d)
+		|> aggregateWindow(every: 30m, fn: mean, createEmpty: false)`,
+			r.bucket, apdexTolerable),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("r.client.QueryAPI(organization).Query: %w", err)
+	}
+
+	apdexMetricMap := make(map[string]aggregates.ApdexMetric)
 
 	startTime := time.Now().Add(-48 * time.Hour).Truncate(30 * time.Minute)
 	for t := startTime; t.Before(time.Now()); t = t.Add(30 * time.Minute) {
 		timeStr := t.Format(time.RFC3339)
-		apdexMetricMap[timeStr] = []aggregates.ApdexMetric{}
+		apdexMetricMap[timeStr] = aggregates.ApdexMetric{}
 	}
 
-	for influxMetrics.Next() {
-		influxMetric := influxMetrics.Record()
+	for satisfactoryMetrics.Next() {
+		influxMetric := satisfactoryMetrics.Record()
 
 		apdexMetric := aggregates.ApdexMetric{
 			Time: influxMetric.Time(),
 		}
 
 		if influxMetric.Value() != nil {
-			if value, ok := influxMetric.Value().(int64); ok {
-				apdexMetric.Value = value
+			if value, ok := influxMetric.Value().(float64); ok {
+				apdexMetric.SatisfactoryCount = int64(value)
 			} else {
 				slog.Error("result.Record().Value() is not a int64", influxMetric.Value())
 			}
 		}
 
 		apdexValueTimeStr := apdexMetric.Time.Format(time.RFC3339)
-		apdexValues, ok := apdexMetricMap[apdexValueTimeStr]
+		apdexMetricMap[apdexValueTimeStr] = apdexMetric
+	}
+
+	for tolerableMetrics.Next() {
+		influxMetric := tolerableMetrics.Record()
+
+		apdexValueTimeStr := influxMetric.Time().Format(time.RFC3339)
+
+		apdexMetric, ok := apdexMetricMap[apdexValueTimeStr]
 		if !ok {
-			slog.Error(
-				"result.Time not found in apdexMetricMap",
-				slog.Time("apdexMetric", apdexMetric.Time))
 			continue
 		}
 
-		apdexMetricMap[apdexValueTimeStr] = append(apdexValues, apdexMetric)
+		if influxMetric.Value() != nil {
+			if value, ok := influxMetric.Value().(float64); ok {
+				apdexMetric.TolerableCount = int64(value)
+			} else {
+				slog.Error("result.Record().Value() is not a int64", influxMetric.Value())
+			}
+		}
+
+		apdexMetricMap[apdexValueTimeStr] = apdexMetric
 	}
 
-	if influxMetrics.Err() != nil {
-		return nil, fmt.Errorf("result.Err: %w", influxMetrics.Err())
+	for frustratingMetrics.Next() {
+		influxMetric := tolerableMetrics.Record()
+
+		apdexValueTimeStr := influxMetric.Time().Format(time.RFC3339)
+
+		apdexMetric, ok := apdexMetricMap[apdexValueTimeStr]
+		if !ok {
+			continue
+		}
+
+		if influxMetric.Value() != nil {
+			if value, ok := influxMetric.Value().(float64); ok {
+				apdexMetric.FrustratingCount = int64(value)
+			} else {
+				slog.Error("result.Record().Value() is not a int64", influxMetric.Value())
+			}
+		}
+
+		apdexMetricMap[apdexValueTimeStr] = apdexMetric
 	}
 
 	apdexResults := make([]aggregates.ApdexResult, 0)
-	for apdexMetricsTimeStr, apdexMetrics := range apdexMetricMap {
+	for apdexMetricsTimeStr, apdexMetric := range apdexMetricMap {
 		apdexMetricsTime, err := time.Parse(time.RFC3339, apdexMetricsTimeStr)
 		if err != nil {
 			// This should never happen, but if it does, we should log it and
@@ -335,33 +400,24 @@ func (r *Repository) QueryApdex(ctx context.Context) (aggregates.ApdexResults, e
 			continue
 		}
 
-		if len(apdexMetrics) == 0 {
-			apdexResults = append(apdexResults, aggregates.ApdexResult{
-				Time:  apdexMetricsTime,
-				Value: 1,
-			})
-
-			continue
-		}
-
-		var (
-			satisfactory = 0
-			tolerating   = 0
-		)
-
-		for _, apdexMetric := range apdexMetrics {
-			if apdexMetric.Value <= apdexSatisfactory {
-				satisfactory++
-			} else if apdexMetric.Value <= apdexTolerable {
-				tolerating++
-			}
-		}
-
-		apdex := (float64(satisfactory) + float64(tolerating)/2) / float64(len(apdexMetrics))
 		apdexResults = append(apdexResults, aggregates.ApdexResult{
 			Time:  apdexMetricsTime,
-			Value: apdex,
+			Value: 1,
 		})
+
+		var (
+			satisfactory = apdexMetric.SatisfactoryCount
+			tolerating   = apdexMetric.TolerableCount
+			total        = satisfactory + tolerating + apdexMetric.FrustratingCount
+		)
+
+		if total > 0 {
+			apdex := (float64(satisfactory) + float64(tolerating)/2) / float64(total)
+			apdexResults = append(apdexResults, aggregates.ApdexResult{
+				Time:  apdexMetricsTime,
+				Value: apdex,
+			})
+		}
 	}
 
 	sort.Slice(apdexResults, func(i, j int) bool {
