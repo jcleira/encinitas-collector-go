@@ -16,6 +16,7 @@ services:
       POSTGRES_PASS: ${POSTGRES_PASS}
       POSTGRES_DB: solana
       INFLUXDB_URL: http://100.116.116.76:8086
+      INFLUXDB_TELEGRAF_URL: http://100.116.116.76:8087/metrics
       INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
     image: 017128164736.dkr.ecr.eu-west-1.amazonaws.com/encinitas-collector-go:dev
     network_mode: host

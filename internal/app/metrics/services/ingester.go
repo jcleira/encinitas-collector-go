@@ -26,12 +26,9 @@ type agentRedisRepository interface {
 	GetEvent(context.Context, string) (agentAggregates.Event, error)
 }
 
-type influxDBTransactionsRepository interface {
-	WriteTransaction(context.Context, aggregates.TransactionMetric)
-}
-
-type influxDBProgramsRepository interface {
-	WriteProgram(context.Context, aggregates.ProgramMetric)
+type influxTelegrafRepository interface {
+	WriteTransaction(context.Context, aggregates.TransactionMetric) error
+	WriteProgram(context.Context, aggregates.ProgramMetric) error
 }
 
 type solanaSQLRepository interface {
@@ -41,27 +38,24 @@ type solanaSQLRepository interface {
 // Ingester is a service that ingests information coming from both the Solana
 // blockchain and agents events (browser/mobile).
 type Ingester struct {
-	solanaRedisRepository          solanaRedisRepository
-	agentRedisRepository           agentRedisRepository
-	influxDBTransactionsRepository influxDBTransactionsRepository
-	influxDBProgramsRepository     influxDBProgramsRepository
-	solanaSQLRepository            solanaSQLRepository
+	solanaRedisRepository    solanaRedisRepository
+	agentRedisRepository     agentRedisRepository
+	influxTelegrafRepository influxTelegrafRepository
+	solanaSQLRepository      solanaSQLRepository
 }
 
 // NewIngester creates a new instance of the Ingester service.
 func NewIngester(
 	solanaRedisRepository solanaRedisRepository,
 	agentRedisRepository agentRedisRepository,
-	influxDBTransactionsRepository influxDBTransactionsRepository,
-	influxDBProgramsRepository influxDBProgramsRepository,
+	influxTelegrafRepository influxTelegrafRepository,
 	solanaSQLRepository solanaSQLRepository,
 ) *Ingester {
 	return &Ingester{
-		solanaRedisRepository:          solanaRedisRepository,
-		agentRedisRepository:           agentRedisRepository,
-		influxDBTransactionsRepository: influxDBTransactionsRepository,
-		influxDBProgramsRepository:     influxDBProgramsRepository,
-		solanaSQLRepository:            solanaSQLRepository,
+		solanaRedisRepository:    solanaRedisRepository,
+		agentRedisRepository:     agentRedisRepository,
+		influxTelegrafRepository: influxTelegrafRepository,
+		solanaSQLRepository:      solanaSQLRepository,
 	}
 }
 
@@ -146,7 +140,11 @@ func (i *Ingester) Ingest(ctx context.Context) {
 					event.Response.ResponseTime).Milliseconds()
 			}
 
-			i.influxDBTransactionsRepository.WriteTransaction(ctx, metric)
+			if err := i.influxTelegrafRepository.WriteTransaction(
+				ctx, metric); err != nil {
+				slog.Error("error while writing transaction metric", err)
+				continue
+			}
 
 			if transaction.LegacyMessage == "" {
 				slog.Error("transaction.LegacyMessage is empty")
@@ -181,13 +179,16 @@ func (i *Ingester) Ingest(ctx context.Context) {
 					continue
 				}
 
-				i.influxDBProgramsRepository.WriteProgram(ctx,
+				if err := i.influxTelegrafRepository.WriteProgram(ctx,
 					aggregates.ProgramMetric{
 						ProgramAddress: base58.Encode(bytes),
 						UpdatedOn:      transaction.UpdatedOn,
 						RPCTime:        metric.RPCTime,
 						SolanaTime:     metric.SolanaTime,
-					})
+					}); err != nil {
+					slog.Error("error while writing program metric", err)
+					continue
+				}
 			}
 
 		case err := <-errors:

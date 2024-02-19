@@ -1,13 +1,13 @@
 package influx
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"sort"
 	"time"
-
-	influxdb "github.com/influxdata/influxdb-client-go/v2"
 
 	"github.com/jcleira/encinitas-collector-go/internal/app/metrics/aggregates"
 )
@@ -17,34 +17,64 @@ const (
 	apdexTolerable    = 1500
 )
 
-// WriteTransaction writes a transaction metric to the InfluxDB server.
+// WriteTransaction writes a transaction metric to Telegraf using HTTP.
 func (r *Repository) WriteTransaction(ctx context.Context,
-	metric aggregates.TransactionMetric) {
-	r.influxdbWriter.WritePoint(
-		influxdb.NewPointWithMeasurement("events").
-			AddTag("event_ID", metric.EventID).
-			AddTag("signature", metric.Signature).
-			AddField("rpc_time", metric.RPCTime).
-			AddField("solana_time", metric.SolanaTime).
-			AddField("error", metric.Error).
-			SetTime(metric.UpdatedOn),
-	)
+	metric aggregates.TransactionMetric) error {
+	// TODO I'm writing the metric with time.Now().UnixNano() as the timestamp
+	// but I should be using the timestamp from the Solana block.
+	data := fmt.Sprintf(
+		"transactions,event_id=%s,signature=%s,error=%t rpc_time=%d,solana_time=%d %d",
+		metric.EventID, metric.Signature, metric.Error,
+		metric.RPCTime, metric.SolanaTime,
+		time.Now().UnixNano())
 
-	r.influxdbWriter.Flush()
+	req, err := http.NewRequestWithContext(ctx,
+		"POST", r.telegrafURL, bytes.NewBufferString(data))
+	if err != nil {
+		return fmt.Errorf("http.NewRequestWithContext: %w", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("http.DefaultClient.Do: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("http.DefaultClient.Do: %d", resp.StatusCode)
+	}
+
+	return nil
 }
 
-// WriteProgram writes a program transaction metric to the InfluxDB server.
+// WriteProgram writes a program transaction metric to Telegraf using HTTP.
 func (r *Repository) WriteProgram(ctx context.Context,
-	metric aggregates.ProgramMetric) {
-	r.influxdbWriter.WritePoint(
-		influxdb.NewPointWithMeasurement(metric.ProgramAddress).
-			AddTag("program_address", metric.ProgramAddress).
-			AddField("rpc_time", metric.RPCTime).
-			AddField("solana_time", metric.SolanaTime).
-			SetTime(metric.UpdatedOn),
-	)
+	metric aggregates.ProgramMetric) error {
+	// TODO I'm writing the metric with time.Now().UnixNano() as the timestamp
+	// but I should be using the timestamp from the Solana block.
+	data := fmt.Sprintf(
+		"%s,program_address=%s rpc_time=%d,solana_time=%d %d",
+		metric.ProgramAddress, metric.ProgramAddress,
+		metric.RPCTime, metric.SolanaTime,
+		time.Now().UnixNano())
 
-	r.influxdbWriter.Flush()
+	req, err := http.NewRequestWithContext(ctx,
+		"POST", r.telegrafURL, bytes.NewBufferString(data))
+	if err != nil {
+		return fmt.Errorf("http.NewRequestWithContext: %w", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("http.DefaultClient.Do: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("failed to write metric, status code: %d", resp.StatusCode)
+	}
+
+	return nil
 }
 
 // QueryPerformance queries the InfluxDB server for performance metrics.
@@ -56,9 +86,9 @@ func (r *Repository) QueryPerformance(ctx context.Context) (aggregates.Performan
 		fmt.Sprintf(
 			`from(bucket:"%s")
     |> range(start: -2d)
-    |> filter(fn: (r) => r._measurement == "events")
-    |> filter(fn: (r) => r._field == "rpc_time"
-			or r._field == "solana_time")
+    |> filter(fn: (r) => r._measurement == "transactions")
+    |> filter(fn: (r) => r._field == "rpc_time_mean"
+			or r._field == "solana_time_mean")
 		|> group(columns: ["_field"])
     |> aggregateWindow(every: 30m, fn: mean)`, r.bucket),
 	)
@@ -74,9 +104,9 @@ func (r *Repository) QueryPerformance(ctx context.Context) (aggregates.Performan
 		}
 
 		switch result.Record().Field() {
-		case "rpc_time":
+		case "rpc_time_mean":
 			performanceResult.Type = aggregates.TypeRPCTime
-		case "solana_time":
+		case "solana_time_mean":
 			performanceResult.Type = aggregates.TypeSolanaTime
 		}
 
@@ -109,8 +139,8 @@ func (r *Repository) QueryProgramPerformance(
 			from(bucket:"%s")
     |> range(start: -2d)
     |> filter(fn: (r) => r._measurement == "%s")
-    |> filter(fn: (r) => r._field == "rpc_time"
-			or r._field == "solana_time")
+    |> filter(fn: (r) => r._field == "rpc_time_mean"
+			or r._field == "solana_time_mean")
 		|> group(columns: ["_field"])
     |> aggregateWindow(every: 30m, fn: mean)`, r.bucket, program),
 	)
@@ -126,9 +156,9 @@ func (r *Repository) QueryProgramPerformance(
 		}
 
 		switch result.Record().Field() {
-		case "rpc_time":
+		case "rpc_time_mean":
 			performanceResult.Type = aggregates.TypeRPCTime
-		case "solana_time":
+		case "solana_time_mean":
 			performanceResult.Type = aggregates.TypeSolanaTime
 		}
 
@@ -159,8 +189,8 @@ func (r *Repository) QueryThroughput(ctx context.Context) (aggregates.Throughput
 		fmt.Sprintf(
 			`from(bucket:"%s")
     |> range(start: -2d)
-    |> filter(fn: (r) => r._measurement == "events")
-    |> filter(fn: (r) => r._field == "rpc_time")
+    |> filter(fn: (r) => r._measurement == "transactions")
+    |> filter(fn: (r) => r._field == "rpc_time_count")
 		|> group()
     |> aggregateWindow(every: 30m, fn: count)`, r.bucket),
 	)
@@ -204,6 +234,7 @@ func (r *Repository) QueryProgramThroughput(
 			`from(bucket:"%s")
     |> range(start: -2d)
     |> filter(fn: (r) => r._measurement == "%s")
+    |> filter(fn: (r) => r._field == "rpc_time_count")
 		|> group()
     |> aggregateWindow(every: 30m, fn: count)`, r.bucket, programAddress),
 	)
@@ -246,8 +277,8 @@ func (r *Repository) QueryApdex(ctx context.Context) (aggregates.ApdexResults, e
 		fmt.Sprintf(`
 			from(bucket:"%s")
 		|> range(start: -2d)
-		|> filter(fn: (r) => r._measurement == "events")
-		|> filter(fn: (r) => r._field == "rpc_time" or r._field == "solana_time")
+		|> filter(fn: (r) => r._measurement == "transactions")
+		|> filter(fn: (r) => r._field == "rpc_time_sum" or r._field == "solana_time_sum")
 		|> group(columns: ["_time"])
 		|> aggregateWindow(every: 30m, fn: sum, createEmpty: false)`, r.bucket),
 	)
@@ -346,7 +377,8 @@ func (r *Repository) QueryErrors(
 		fmt.Sprintf(`
 			from(bucket: "%s")
 			|> range(start: -2d)
-			|> filter(fn: (r) => r._field == "error" and r._value == true)
+			|> filter(fn: (r) => r._measurement == "transactions")
+			|> filter(fn: (r) => r.error == "true")
 			|> group(columns: ["_time"])
 			|> group()
 			|> aggregateWindow(every: 30m, fn: count, createEmpty: false)
@@ -360,8 +392,8 @@ func (r *Repository) QueryErrors(
 		fmt.Sprintf(`
 			from(bucket: "%s")
 			|> range(start: -2d)
-			|> filter(fn: (r) => r._measurement == "events")
-			|> filter(fn: (r) => r._field == "error")
+			|> filter(fn: (r) => r._measurement == "transactions")
+			|> filter(fn: (r) => r.error == "false" or r.error == "true")
 			|> group(columns: ["_time"])
 			|> group()
 			|> aggregateWindow(every: 30m, fn: count, createEmpty: false)

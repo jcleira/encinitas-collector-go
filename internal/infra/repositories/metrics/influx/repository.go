@@ -1,10 +1,7 @@
 package influx
 
 import (
-	"log/slog"
-
 	influxdb "github.com/influxdata/influxdb-client-go/v2"
-	influxdbapi "github.com/influxdata/influxdb-client-go/v2/api"
 )
 
 const (
@@ -15,27 +12,19 @@ const (
 
 // Repository define the dependencies needed to store events in InfluxDB.
 type Repository struct {
-	client         influxdb.Client
-	influxdbWriter influxdbapi.WriteAPI
-	organization   string
-	bucket         string
+	client       influxdb.Client
+	telegrafURL  string
+	organization string
+	bucket       string
 }
 
 // New creates a new instance of the InfluxDB repository.
-func New(client influxdb.Client, bucket string) *Repository {
-	influxdbWriter := client.WriteAPI(organization, bucket)
-	errorsCh := influxdbWriter.Errors()
-	go func() {
-		for err := range errorsCh {
-			slog.Error("error writing to InfluxDB: ", err)
-		}
-	}()
-
+func New(client influxdb.Client, telegrafURL, bucket string) *Repository {
 	return &Repository{
-		client:         client,
-		organization:   organization,
-		bucket:         bucket,
-		influxdbWriter: influxdbWriter,
+		client:       client,
+		organization: organization,
+		bucket:       bucket,
+		telegrafURL:  telegrafURL,
 	}
 }
 
