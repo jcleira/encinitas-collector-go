@@ -43,6 +43,7 @@ func (p Postgres) URL() string {
 }
 
 type InfluxDB struct {
-	URL   string `envconfig:"INFLUXDB_URL" default:"http://localhost:8086"`
-	Token string `envconfig:"INFLUXDB_TOKEN" default:""`
+	URL         string `envconfig:"INFLUXDB_URL" default:"http://localhost:8086"`
+	TelegrafURL string `envconfig:"INFLUXDB_TELEGRAF_URL" default:"http://localhost:8087"`
+	Token       string `envconfig:"INFLUXDB_TOKEN" default:""`
 }
