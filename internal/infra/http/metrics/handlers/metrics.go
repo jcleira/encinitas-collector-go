@@ -62,7 +62,6 @@ func (ech *MetricsRetrieverHandler) Handle(c *gin.Context) {
 
 	httpMetricsResponse := struct {
 		Performance struct {
-			RPC    [][]interface{} `json:"rpc"`
 			Solana [][]interface{} `json:"solana"`
 		} `json:"performance"`
 		Throughput [][]interface{} `json:"throughput"`
@@ -71,15 +70,9 @@ func (ech *MetricsRetrieverHandler) Handle(c *gin.Context) {
 	}{}
 
 	for _, metric := range performanceMetrics {
-		if metric.Type == aggregates.TypeRPCTime {
-			httpMetricsResponse.Performance.RPC = append(
-				httpMetricsResponse.Performance.RPC,
-				[]interface{}{metric.Time, metric.Value})
-		} else {
-			httpMetricsResponse.Performance.Solana = append(
-				httpMetricsResponse.Performance.Solana,
-				[]interface{}{metric.Time, metric.Value})
-		}
+		httpMetricsResponse.Performance.Solana = append(
+			httpMetricsResponse.Performance.Solana,
+			[]interface{}{metric.Time, metric.Value})
 	}
 
 	for _, metric := range througputMetrics {

@@ -8,7 +8,6 @@ type TransactionMetric struct {
 	EventID    string
 	Signature  string
 	UpdatedOn  time.Time
-	RPCTime    int64
 	SolanaTime int64
 	Error      bool
 }
@@ -17,7 +16,6 @@ type TransactionMetric struct {
 type ProgramMetric struct {
 	ProgramAddress string
 	UpdatedOn      time.Time
-	RPCTime        int64
 	SolanaTime     int64
 }
 
@@ -25,9 +23,6 @@ type ProgramMetric struct {
 type Type string
 
 const (
-	// TypeRPCTime represents the type of metric for the RPC time.
-	TypeRPCTime Type = "rpc_time"
-
 	// TypeSolanaTime represents the type of metric for the Solana time.
 	TypeSolanaTime Type = "solana_time"
 )
