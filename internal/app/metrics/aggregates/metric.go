@@ -52,8 +52,11 @@ type ThroughputResult struct {
 type ThroughputResults []ThroughputResult
 
 type ApdexMetric struct {
-	Time  time.Time
-	Value int64
+	Time              time.Time
+	SatisfactoryCount int64
+	TolerableCount    int64
+	FrustratingCount  int64
+	Value             int64
 }
 
 // ApdexResult represents an Apdex result.
