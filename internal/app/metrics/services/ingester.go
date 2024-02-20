@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"math/rand"
 	"strings"
@@ -33,6 +32,7 @@ type influxTelegrafRepository interface {
 
 type solanaSQLRepository interface {
 	InsertTransactionDetail(context.Context, solanaAggregates.TransactionDetail) error
+	GetBlockTimeByBlockHash(context.Context, string) (time.Time, error)
 }
 
 // Ingester is a service that ingests information coming from both the Solana
@@ -88,56 +88,43 @@ func (i *Ingester) Ingest(ctx context.Context) {
 				Error: rand.Float64() < 0.018,
 			}
 
-			event, err := i.agentRedisRepository.GetEvent(ctx,
-				fmt.Sprintf("sendTransaction.%s", base58.Encode(bytes)),
-			)
+			metric.EventID = transaction.Signature
 
-			switch {
-			case err != nil && !isSolanaProgramDemoID(transaction.Meta):
-				fmt.Println("transaction.Meta", transaction.Meta)
-				slog.Error("error while getting event from redis", err)
+			transactionLegacyMessage := struct {
+				RecentBlockhash string `json:"recent_blockhash"`
+			}{}
+
+			if json.Unmarshal(
+				[]byte(transaction.LegacyMessage), &transactionLegacyMessage); err != nil {
+				slog.Error("error while unmarshalling transaction legacy message", err)
 				continue
+			}
 
-			case err != nil && isSolanaProgramDemoID(transaction.Meta):
-				metric.EventID = transaction.Signature
+			if len(transactionLegacyMessage.RecentBlockhash) < 2 {
+				slog.Error("transactionLegacyMessage.RecentBlockhash is empty")
+				continue
+			}
 
-				currentHour := time.Now().Hour()
+			bytes, err = hex.DecodeString(
+				transactionLegacyMessage.RecentBlockhash[2:])
+			if err != nil {
+				slog.Error("error while decoding program account", err)
+				continue
+			}
 
-				var minRPC, maxRPC int
-				switch {
-				case 12 <= currentHour && currentHour <= 18:
-					minRPC, maxRPC = 100, 400
-				case 22 <= currentHour || currentHour <= 6:
-					minRPC, maxRPC = 50, 150
-				default:
-					minRPC, maxRPC = 75, 300
-				}
+			blockTime, err := i.solanaSQLRepository.GetBlockTimeByBlockHash(
+				ctx, base58.Encode(bytes))
+			if err != nil {
+				slog.Error("error while getting block time by block hash", err)
+				continue
+			}
 
-				randomRPCMillis := rand.Intn(maxRPC-minRPC+1) + minRPC
-				randomRPCDuration := time.Duration(randomRPCMillis) * time.Millisecond
+			metric.SolanaTime = transaction.UpdatedOn.Sub(blockTime).Milliseconds()
 
-				var minSolana, maxSolana int
-				switch {
-				case 12 <= currentHour && currentHour <= 18:
-					minSolana, maxSolana = 300, 600
-				case 22 <= currentHour || currentHour <= 6:
-					minSolana, maxSolana = 100, 150
-				default:
-					minSolana, maxSolana = 75, 300
-				}
-
-				randomSolanaMillis := rand.Intn(maxSolana-minSolana+1) + minSolana
-				randomSolanaDuration := time.Duration(randomSolanaMillis) * time.Millisecond
-
-				metric.RPCTime = randomRPCDuration.Milliseconds()
-				metric.SolanaTime = randomSolanaDuration.Milliseconds()
-
-			case err == nil:
-				metric.EventID = event.ID
-				metric.RPCTime = event.Response.ResponseTime.Sub(
-					event.Request.RequestTime).Milliseconds()
-				metric.SolanaTime = transaction.UpdatedOn.Sub(
-					event.Response.ResponseTime).Milliseconds()
+			if err := json.Unmarshal(
+				[]byte(transaction.LegacyMessage), &transactionLegacyMessage); err != nil {
+				slog.Error("error while unmarshalling transaction legacy message", err)
+				continue
 			}
 
 			if err := i.influxTelegrafRepository.WriteTransaction(
@@ -168,9 +155,7 @@ func (i *Ingester) Ingest(ctx context.Context) {
 				transactionDetail := solanaAggregates.TransactionDetail{
 					ProgramAddress: base58.Encode(bytes),
 					UpdatedOn:      transaction.UpdatedOn,
-					RPCTime:        metric.RPCTime,
 					SolanaTime:     metric.SolanaTime,
-					TotalTime:      metric.RPCTime + metric.SolanaTime,
 				}
 
 				if err := i.solanaSQLRepository.InsertTransactionDetail(
@@ -183,7 +168,6 @@ func (i *Ingester) Ingest(ctx context.Context) {
 					aggregates.ProgramMetric{
 						ProgramAddress: base58.Encode(bytes),
 						UpdatedOn:      transaction.UpdatedOn,
-						RPCTime:        metric.RPCTime,
 						SolanaTime:     metric.SolanaTime,
 					}); err != nil {
 					slog.Error("error while writing program metric", err)

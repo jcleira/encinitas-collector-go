@@ -14,6 +14,10 @@ const (
 	selectTransactionsByProcessedAt = `
 SELECT * FROM encinitas_transactions WHERE processed_at is NULL LIMIT 1000;
 `
+	selectBlockTimeByBlockHash = `
+SELECT updated_on FROM block WHERE blockhash=$1;
+`
+
 	updateTransactionProcessedAt = `
 UPDATE encinitas_transactions
 SET processed_at = :processed_at
@@ -48,6 +52,17 @@ FROM
   total_sum TS;
 `
 )
+
+func (r *Repository) GetBlockTimeByBlockHash(
+	ctx context.Context, blockHash string) (time.Time, error) {
+	var updatedOn time.Time
+	if err := r.db.GetContext(ctx, &updatedOn,
+		selectBlockTimeByBlockHash, sql.Named("block_hash", blockHash)); err != nil {
+		return time.Time{}, fmt.Errorf("r.db.GetContext, err: %w", err)
+	}
+
+	return updatedOn, nil
+}
 
 func (r *Repository) SelectTransactionsByProcessedAt(
 	ctx context.Context) ([]aggregates.Transaction, error) {
