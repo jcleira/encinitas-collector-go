@@ -72,7 +72,7 @@ func (ech *MetricsRetrieverHandler) Handle(c *gin.Context) {
 	for _, metric := range performanceMetrics {
 		httpMetricsResponse.Performance.Solana = append(
 			httpMetricsResponse.Performance.Solana,
-			[]interface{}{metric.Time, metric.Value})
+			[]interface{}{metric.Time, int64(metric.Value)})
 	}
 
 	for _, metric := range througputMetrics {
