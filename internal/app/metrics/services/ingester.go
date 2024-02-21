@@ -167,7 +167,6 @@ func (i *Ingester) Ingest(ctx context.Context) {
 				if err := i.influxTelegrafRepository.WriteProgram(ctx,
 					aggregates.ProgramMetric{
 						ProgramAddress: base58.Encode(bytes),
-						UpdatedOn:      transaction.UpdatedOn,
 						SolanaTime:     metric.SolanaTime,
 					}); err != nil {
 					slog.Error("error while writing program metric", err)

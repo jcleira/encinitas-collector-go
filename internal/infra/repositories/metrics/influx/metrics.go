@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	apdexSatisfactory = 18000
-	apdexTolerable    = 20000
+	apdexSatisfactory = 21000
+	apdexTolerable    = 24000
 )
 
 // WriteTransaction writes a transaction metric to Telegraf using HTTP.
@@ -165,6 +165,9 @@ func (r *Repository) QueryProgramPerformance(
 		performanceResults = append(performanceResults, performanceResult)
 	}
 
+	// remove the last element from the slice, as it's always empty
+	performanceResults = performanceResults[:len(performanceResults)-1]
+
 	if result.Err() != nil {
 		return nil, fmt.Errorf("result.Err: %w", result.Err())
 	}
@@ -274,6 +277,7 @@ func (r *Repository) QueryApdex(ctx context.Context) (aggregates.ApdexResults, e
 		|> filter(fn: (r) => r._measurement == "transactions")
 		|> filter(fn: (r) => r._field == "solana_time_mean")
 		|> filter(fn: (r) => r._value < %d)
+		|> group()
 		|> aggregateWindow(every: 30m, fn: mean, createEmpty: false)`, r.bucket, apdexSatisfactory),
 	)
 	if err != nil {
@@ -290,6 +294,7 @@ func (r *Repository) QueryApdex(ctx context.Context) (aggregates.ApdexResults, e
 		|> filter(fn: (r) => r._field == "solana_time_mean")
 		|> filter(fn: (r) => r._value > %d)
 		|> filter(fn: (r) => r._value < %d)
+		|> group()
 		|> aggregateWindow(every: 30m, fn: mean, createEmpty: false)`,
 			r.bucket, apdexSatisfactory, apdexTolerable),
 	)
@@ -306,6 +311,7 @@ func (r *Repository) QueryApdex(ctx context.Context) (aggregates.ApdexResults, e
 		|> filter(fn: (r) => r._measurement == "transactions")
 		|> filter(fn: (r) => r._field == "solana_time_mean")
 		|> filter(fn: (r) => r._value > %d)
+		|> group()
 		|> aggregateWindow(every: 30m, fn: mean, createEmpty: false)`,
 			r.bucket, apdexTolerable),
 	)
@@ -392,11 +398,6 @@ func (r *Repository) QueryApdex(ctx context.Context) (aggregates.ApdexResults, e
 			slog.Error("time.Parse", err)
 			continue
 		}
-
-		apdexResults = append(apdexResults, aggregates.ApdexResult{
-			Time:  apdexMetricsTime,
-			Value: 1,
-		})
 
 		var (
 			satisfactory = apdexMetric.SatisfactoryCount
