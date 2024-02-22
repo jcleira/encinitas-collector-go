@@ -3,10 +3,12 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/jcleira/encinitas-collector-go/internal/app/metrics/aggregates"
+	"github.com/jcleira/encinitas-collector-go/internal/infra/http/metrics/handlers/cacheprogram"
 )
 
 // metricsProgramRetriever defines the methods needed to retrievetmetrics.
@@ -21,6 +23,8 @@ type metricsProgramRetriever interface {
 type MetricsProgramRetrieverHandler struct {
 	metricsProgramRetriever metricsProgramRetriever
 }
+
+var metricsCache = cacheprogram.NewMetricsCache(10 * time.Minute)
 
 // NewMetricsProgramRetrieverHandler initializes a new MetricsProgramRetrieverHandler.
 func NewMetricsProgramRetrieverHandler(
@@ -38,6 +42,13 @@ func (ech *MetricsProgramRetrieverHandler) Handle(c *gin.Context) {
 		return
 	}
 
+	if cachedItem, found := metricsCache.Get(programID); found {
+		c.JSON(
+			http.StatusOK,
+			mapToHttpMetricsResponse(cachedItem.Performance, cachedItem.Throughput))
+		return
+	}
+
 	performanceMetrics, err := ech.metricsProgramRetriever.QueryProgramPerformance(
 		c.Request.Context(), programID)
 	if err != nil {
@@ -52,6 +63,20 @@ func (ech *MetricsProgramRetrieverHandler) Handle(c *gin.Context) {
 		return
 	}
 
+	metricsCache.Set(programID, cacheprogram.CacheItem{
+		Performance: performanceMetrics,
+		Throughput:  througputMetrics,
+		LastUpdated: time.Now(),
+	})
+
+	c.JSON(
+		http.StatusOK,
+		mapToHttpMetricsResponse(performanceMetrics, througputMetrics))
+}
+
+func mapToHttpMetricsResponse(
+	performance aggregates.PerformanceResults,
+	throughput aggregates.ThroughputResults) interface{} {
 	httpMetricsResponse := struct {
 		Performance struct {
 			Solana [][]interface{} `json:"solana"`
@@ -59,17 +84,18 @@ func (ech *MetricsProgramRetrieverHandler) Handle(c *gin.Context) {
 		Throughput [][]interface{} `json:"throughput"`
 	}{}
 
-	for _, metric := range performanceMetrics {
+	for _, metric := range performance {
 		httpMetricsResponse.Performance.Solana = append(
 			httpMetricsResponse.Performance.Solana,
 			[]interface{}{metric.Time, metric.Value})
 	}
 
-	for _, metric := range througputMetrics {
+	for _, metric := range throughput {
 		httpMetricsResponse.Throughput = append(
 			httpMetricsResponse.Throughput,
 			[]interface{}{metric.Time, metric.Value})
 	}
 
-	c.JSON(http.StatusOK, httpMetricsResponse)
+	return httpMetricsResponse
+
 }

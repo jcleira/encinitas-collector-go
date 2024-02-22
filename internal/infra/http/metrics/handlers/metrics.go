@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/jcleira/encinitas-collector-go/internal/app/metrics/aggregates"
+	"github.com/jcleira/encinitas-collector-go/internal/infra/http/metrics/handlers/cache"
 )
 
 // metricsRetriever defines the methods needed to retrievetmetrics.
@@ -32,32 +33,35 @@ func NewMetricsRetriever(
 
 // Handle is the handler function to retrieve metrics
 func (ech *MetricsRetrieverHandler) Handle(c *gin.Context) {
-	performanceMetrics, err := ech.metricsRetriever.QueryPerformance(
-		c.Request.Context())
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
+	performanceMetrics, throughputMetrics, apdexMetrics, errorMetrics, cached := cache.GetCache()
 
-	througputMetrics, err := ech.metricsRetriever.QueryThroughput(
-		c.Request.Context())
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
+	if !cached {
+		var err error
+		performanceMetrics, err = ech.metricsRetriever.QueryPerformance(c.Request.Context())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 
-	apdexMetrics, err := ech.metricsRetriever.QueryApdex(
-		c.Request.Context())
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
+		throughputMetrics, err = ech.metricsRetriever.QueryThroughput(c.Request.Context())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 
-	errorMetrics, err := ech.metricsRetriever.QueryErrors(
-		c.Request.Context())
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+		apdexMetrics, err = ech.metricsRetriever.QueryApdex(c.Request.Context())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		errorMetrics, err = ech.metricsRetriever.QueryErrors(c.Request.Context())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		cache.UpdateCache(performanceMetrics, throughputMetrics, apdexMetrics, errorMetrics)
 	}
 
 	httpMetricsResponse := struct {
@@ -75,7 +79,7 @@ func (ech *MetricsRetrieverHandler) Handle(c *gin.Context) {
 			[]interface{}{metric.Time, int64(metric.Value)})
 	}
 
-	for _, metric := range througputMetrics {
+	for _, metric := range throughputMetrics {
 		httpMetricsResponse.Throughput = append(
 			httpMetricsResponse.Throughput,
 			[]interface{}{metric.Time, metric.Value})
