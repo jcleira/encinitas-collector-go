@@ -84,7 +84,8 @@ func (i *Ingester) Ingest(ctx context.Context) {
 				Signature: transaction.Signature,
 				// TODO: We are setting the error rate to keep some randomness around
 				// 0.18% for now,but we should be using the error rate from the
-				// transactions.
+				// transactions, but the selected transactions for the demo do not
+				// fail frequently.
 				Error: rand.Float64() < 0.018,
 			}
 

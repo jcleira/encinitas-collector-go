@@ -25,7 +25,7 @@ func (r *Repository) WriteTransaction(ctx context.Context,
 	data := fmt.Sprintf(
 		"transactions,event_id=%s,signature=%s,error=%t solana_time=%d %d",
 		metric.EventID, metric.Signature, metric.Error,
-		metric.SolanaTime, time.Now().UnixNano())
+		metric.SolanaTime, time.Now().UTC().UnixNano())
 
 	req, err := http.NewRequestWithContext(ctx,
 		"POST", r.telegrafURL, bytes.NewBufferString(data))
@@ -54,7 +54,7 @@ func (r *Repository) WriteProgram(ctx context.Context,
 	data := fmt.Sprintf(
 		"%s,program_address=%s solana_time=%d %d",
 		metric.ProgramAddress, metric.ProgramAddress,
-		metric.SolanaTime, time.Now().UnixNano())
+		metric.SolanaTime, time.Now().UTC().UnixNano())
 
 	req, err := http.NewRequestWithContext(ctx,
 		"POST", r.telegrafURL, bytes.NewBufferString(data))
@@ -83,7 +83,7 @@ func (r *Repository) QueryPerformance(ctx context.Context) (aggregates.Performan
 	result, err := r.client.QueryAPI(organization).Query(ctx,
 		fmt.Sprintf(
 			`from(bucket:"%s")
-    |> range(start: -2d)
+    |> range(start: -1d)
     |> filter(fn: (r) => r._measurement == "transactions")
     |> filter(fn: (r) => r._field == "solana_time_mean")
 		|> group(columns: ["_field"])
@@ -132,7 +132,7 @@ func (r *Repository) QueryProgramPerformance(
 	result, err := r.client.QueryAPI(organization).Query(ctx,
 		fmt.Sprintf(`
 			from(bucket:"%s")
-    |> range(start: -2d)
+    |> range(start: -1d)
     |> filter(fn: (r) => r._measurement == "%s")
     |> filter(fn: (r) => r._field == "solana_time_mean")
 		|> group(columns: ["_field"])
@@ -183,7 +183,7 @@ func (r *Repository) QueryThroughput(ctx context.Context) (aggregates.Throughput
 	result, err := r.client.QueryAPI(organization).Query(ctx,
 		fmt.Sprintf(
 			`from(bucket:"%s")
-    |> range(start: -2d)
+    |> range(start: -1d)
     |> filter(fn: (r) => r._measurement == "transactions")
     |> filter(fn: (r) => r._field == "solana_time_count")
 		|> group()
@@ -211,6 +211,9 @@ func (r *Repository) QueryThroughput(ctx context.Context) (aggregates.Throughput
 		throughputResults = append(throughputResults, throughputResult)
 	}
 
+	// remove the last element from the slice, as it has not the proper date
+	throughputResults = throughputResults[:len(throughputResults)-1]
+
 	if result.Err() != nil {
 		return nil, fmt.Errorf("result.Err: %w", result.Err())
 	}
@@ -227,11 +230,11 @@ func (r *Repository) QueryProgramThroughput(
 	result, err := r.client.QueryAPI(organization).Query(ctx,
 		fmt.Sprintf(
 			`from(bucket:"%s")
-    |> range(start: -2d)
+    |> range(start: -1d)
     |> filter(fn: (r) => r._measurement == "%s")
     |> filter(fn: (r) => r._field == "solana_time_count")
 		|> group()
-    |> aggregateWindow(every: 30m, fn: count)`, r.bucket, programAddress),
+    |> aggregateWindow(every: 30m, fn: sum)`, r.bucket, programAddress),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("r.client.QueryAPI(organization).Query: %w", err)
@@ -245,8 +248,8 @@ func (r *Repository) QueryProgramThroughput(
 		}
 
 		if result.Record().Value() != nil {
-			if value, ok := result.Record().Value().(int64); ok {
-				throughputResult.Value = value
+			if value, ok := result.Record().Value().(float64); ok {
+				throughputResult.Value = int64(value)
 			} else {
 				slog.Error("result.Record().Value() is not a int64", result.Record().Value())
 			}
@@ -254,6 +257,9 @@ func (r *Repository) QueryProgramThroughput(
 
 		throughputResults = append(throughputResults, throughputResult)
 	}
+
+	// remove the last element from the slice, as it has not the proper date
+	throughputResults = throughputResults[:len(throughputResults)-1]
 
 	if result.Err() != nil {
 		return nil, fmt.Errorf("result.Err: %w", result.Err())
@@ -273,7 +279,7 @@ func (r *Repository) QueryApdex(ctx context.Context) (aggregates.ApdexResults, e
 		// but it should be using both the solana time.
 		fmt.Sprintf(`
 			from(bucket:"%s")
-		|> range(start: -2d)
+		|> range(start: -1d)
 		|> filter(fn: (r) => r._measurement == "transactions")
 		|> filter(fn: (r) => r._field == "solana_time_mean")
 		|> filter(fn: (r) => r._value < %d)
@@ -289,7 +295,7 @@ func (r *Repository) QueryApdex(ctx context.Context) (aggregates.ApdexResults, e
 		// but it should be using both the solana time.
 		fmt.Sprintf(`
 			from(bucket:"%s")
-		|> range(start: -2d)
+		|> range(start: -1d)
 		|> filter(fn: (r) => r._measurement == "transactions")
 		|> filter(fn: (r) => r._field == "solana_time_mean")
 		|> filter(fn: (r) => r._value > %d)
@@ -307,7 +313,7 @@ func (r *Repository) QueryApdex(ctx context.Context) (aggregates.ApdexResults, e
 		// but it should be using both the solana time.
 		fmt.Sprintf(`
 			from(bucket:"%s")
-		|> range(start: -2d)
+		|> range(start: -1d)
 		|> filter(fn: (r) => r._measurement == "transactions")
 		|> filter(fn: (r) => r._field == "solana_time_mean")
 		|> filter(fn: (r) => r._value > %d)
@@ -321,8 +327,8 @@ func (r *Repository) QueryApdex(ctx context.Context) (aggregates.ApdexResults, e
 
 	apdexMetricMap := make(map[string]aggregates.ApdexMetric)
 
-	startTime := time.Now().Add(-48 * time.Hour).Truncate(30 * time.Minute)
-	for t := startTime; t.Before(time.Now()); t = t.Add(30 * time.Minute) {
+	startTime := time.Now().UTC().Add(-48 * time.Hour).Truncate(30 * time.Minute)
+	for t := startTime; t.Before(time.Now().UTC()); t = t.Add(30 * time.Minute) {
 		timeStr := t.Format(time.RFC3339)
 		apdexMetricMap[timeStr] = aggregates.ApdexMetric{
 			Time: t,
@@ -332,7 +338,7 @@ func (r *Repository) QueryApdex(ctx context.Context) (aggregates.ApdexResults, e
 	for satisfactoryMetrics.Next() {
 		influxMetric := satisfactoryMetrics.Record()
 
-		apdexValueTimeStr := influxMetric.Time().Format(time.RFC3339)
+		apdexValueTimeStr := influxMetric.Time().UTC().Format(time.RFC3339)
 		apdexMetric, ok := apdexMetricMap[apdexValueTimeStr]
 		if !ok {
 			continue
@@ -352,7 +358,7 @@ func (r *Repository) QueryApdex(ctx context.Context) (aggregates.ApdexResults, e
 	for tolerableMetrics.Next() {
 		influxMetric := tolerableMetrics.Record()
 
-		apdexValueTimeStr := influxMetric.Time().Format(time.RFC3339)
+		apdexValueTimeStr := influxMetric.Time().UTC().Format(time.RFC3339)
 		apdexMetric, ok := apdexMetricMap[apdexValueTimeStr]
 		if !ok {
 			continue
@@ -372,7 +378,7 @@ func (r *Repository) QueryApdex(ctx context.Context) (aggregates.ApdexResults, e
 	for frustratingMetrics.Next() {
 		influxMetric := frustratingMetrics.Record()
 
-		apdexValueTimeStr := influxMetric.Time().Format(time.RFC3339)
+		apdexValueTimeStr := influxMetric.Time().UTC().Format(time.RFC3339)
 		apdexMetric, ok := apdexMetricMap[apdexValueTimeStr]
 		if !ok {
 			continue
@@ -455,8 +461,8 @@ func (r *Repository) QueryErrors(
 
 	errorMetricMap := make(map[string]aggregates.ErrorResult)
 
-	startTime := time.Now().Add(-48 * time.Hour).Truncate(30 * time.Minute)
-	for t := startTime; t.Before(time.Now()); t = t.Add(30 * time.Minute) {
+	startTime := time.Now().UTC().Add(-48 * time.Hour).Truncate(30 * time.Minute)
+	for t := startTime; t.Before(time.Now().UTC()); t = t.Add(30 * time.Minute) {
 		timeStr := t.Format(time.RFC3339)
 		errorMetricMap[timeStr] = aggregates.ErrorResult{
 			Time: t,
