@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
@@ -111,7 +112,17 @@ func main() {
 
 	g.Go(func() error {
 		router := gin.Default()
-		router.Use(cors.Default())
+
+		corsConfig := cors.Config{
+			AllowAllOrigins:  true,
+			AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+			AllowHeaders:     []string{"Origin", "Content-Length", "Content-Type", "Authorization"},
+			ExposeHeaders:    []string{"Content-Length"},
+			AllowCredentials: true,
+			MaxAge:           12 * time.Hour,
+		}
+
+		router.Use(cors.New(corsConfig))
 
 		router.POST("/agent/events",
 			agentHandlers.NewEventsCreatorHandler(
